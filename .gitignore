@@ -1,0 +1,46 @@
+# .gitignore for FlowCollect
+
+# 编译输出目录
+dist/
+*.exe
+*.exe~
+
+# Go 编译文件
+*.test
+*.out
+*.prof
+*.so
+*.dll
+
+# 依赖目录
+vendor/
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 环境文件
+.env
+.env.local
+
+# 二进制文件
+/bin/
+/out/
+
+# 临时文件
+temp/
+tmp/
+
+# 日志文件
+*.log
+logs/
+
+# 配置文件
+*.ini
