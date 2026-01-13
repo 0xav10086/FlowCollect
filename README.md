@@ -62,12 +62,20 @@ $env:GOOS="linux"; $env:GOARCH="mipsle"; go build -o tracker_router client.go
 
 ## 4. 配置说明
 
-| 配置项 | 说明 | 默认值 |
-| --- | --- | --- |
-| `MihomoAPIAddr` | 本地内核外部控制地址 | `127.0.0.1:9097` |
-| `MihomoSecret` | 内核 API 访问密钥 | `abcd` |
-| `ListenPort` | 服务端 API 监听端口 | `8686` |
-| `Interval` | 采样上报周期 | `10s` |
+本系统使用 `.ini` 文件进行配置。出于安全考虑，真实的配置文件已被 `git ignore` 忽略。
+
+### 4.1 获取配置模板
+1. 在 `client/` 目录下创建 `ClientSetting.ini`。
+2. 在 `server/` 目录下创建 `setting.ini`。
+
+您可以参考项目中的 `setting.ini.example` 进行配置。
+
+### 4.2 关键参数说明
+| 参数名 | 说明 |
+| :--- | :--- |
+| `MihomoSecret` | 您 Clash/Mihomo 内核设置的 API 密码 |
+| `RemoteToken` | 客户端与服务端通信的鉴权令牌（两端需保持一致） |
+| `EmailPass` | 发送日报的邮箱授权码（建议使用专用的 SMTP 授权码） |
 
 ## 5. 待办事项 (Roadmap)
 
