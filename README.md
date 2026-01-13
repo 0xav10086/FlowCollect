@@ -51,7 +51,7 @@ scp ./server user@vps_ip:~/traffic-server/
 
 ### 3.2 客户端部署
 
-1. **配置**：修改 `client.go` 中的 `RemoteServer` 为 `http://vps_ip:8686/report`。
+1. **配置**：修改 `client.go` 中的 `RemoteServer` 为 `http://vps_ip:1234/report`。
 2. **编译** (以 OpenWrt 为例)：
 ```powershell
 $env:GOOS="linux"; $env:GOARCH="mipsle"; go build -o tracker_router client.go
@@ -66,7 +66,7 @@ $env:GOOS="linux"; $env:GOARCH="mipsle"; go build -o tracker_router client.go
 
 ### 4.1 获取配置模板
 1. 在 `client/` 目录下创建 `ClientSetting.ini`。
-2. 在 `server/` 目录下创建 `setting.ini`。
+2. 在 `server/` 目录下创建 `ServerSetting.ini`。
 
 您可以参考项目中的 `setting.ini.example` 进行配置。
 

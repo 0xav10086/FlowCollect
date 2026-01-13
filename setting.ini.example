@@ -1,6 +1,21 @@
 # FlowCollect 配置模板
+[client]
 MihomoAPIAddr = http://127.0.0.1:9097
 MihomoSecret  = YOUR_MIHOMO_SECRET
-RemoteServer  = http://YOUR_VPS_IP:8686/report
+RemoteServer  = http://YOUR_VPS_IP:1234/report
 RemoteToken   = A_SECURE_RANDOM_STRING
 DeviceID      = MyDevice
+
+[server]
+ListenPort  = :1234
+ServerToken = YourSecretToken
+DBPath      = database.db
+# 多个订阅用逗号分隔
+SubUrls     = https://sub.com/,https://subscribe.com/
+
+[smtp]
+SMTPHost  = smtp.qq.com
+SMTPPort  = 587
+EmailUser = qq@qq.com
+EmailPass = emailpass
+EmailTo   = qq@qq.com
