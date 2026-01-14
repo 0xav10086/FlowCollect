@@ -37,6 +37,18 @@ const handleLogin = async () => {
     errorMsg.value = '网络连接失败，请检查后端服务'
   }
 }
+
+const handleForgetPassword = (e: Event) => {
+  e.preventDefault()
+  // 跳转到不存在的路径，触发404
+  router.push('/forgot-password-not-found')
+}
+
+const handleSignup = (e: Event) => {
+  e.preventDefault()
+  // 跳转到不存在的路径，触发404
+  router.push('/signup-not-found')
+}
 </script>
 
 <template>
@@ -62,8 +74,8 @@ const handleLogin = async () => {
         <input type="submit" value="Sign in" @click.prevent="handleLogin">
       </div>
       <div class="links">
-        <a href="#">Forget Password</a>
-        <a href="#">Signup</a>
+        <a href="#" @click.prevent="handleForgetPassword">Forget Password</a>
+        <a href="#" @click.prevent="handleSignup">Signup</a>
       </div>
     </div>
   </div>
@@ -95,6 +107,7 @@ const handleLogin = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
+  color: black;
 }
 .ring i {
   position: absolute;
