@@ -22,21 +22,30 @@
 * **泄露预警**：对比机场记录与本地统计，自动检测是否存在代理泄露风险。
 * **每日日报**：每晚 23:55 通过 QQ 邮箱发送详细的流量分析报表。
 
+### 🏗️ 核心架构
 
+* **客户端 (Client)**：部署于 Windows, Android 或 OpenWrt。每 10 秒计算流量增量并通过热加载的 `.ini` 配置文件管理参数。
+* **服务端 (Server)**：部署于 VPS。使用 Gin 提供 API，GORM + SQLite 持久化数据，并集成每日邮件报表。
+* **控制面板 (SmartSpend)**：基于 Vue 3 的现代化前端，直观展示各端流量消耗与审计结果。
 
-## 2. 系统架构
+### 📁 项目结构
 
-* **客户端 (Client)**：部署于 Windows (Clash Verge Rev)、Android (KernelSU + Box) 和 OpenWrt (Nikki)。每 10 秒请求本地内核 API，计算流量增量 (Delta) 并推送。
-* **服务端 (Server)**：部署于 Ubuntu VPS。采用 Gin 框架处理请求，GORM + 纯 Go 版 SQLite (`glebarez/sqlite`) 实现无 CGO 依赖的数据持久化。
+```text
+FlowCollect/
+├── client/          # Go 客户端 (多平台交叉编译)
+├── server/          # Go 服务端 (数据中心与定时任务)
+├── smart_spend/     # Vue 3 可视化控制面板
+├── distribute.ps1   # 一键分发编译脚本 (PowerShell)
+└── go.work          # Go Workspace 工作区配置
+```
 
-## 3. 快速开始
+## 2. 快速开始
 
-### 3.1 服务端部署 (VPS)
+### 2.1 服务端部署 (VPS)
 
 1. **编译** (在 Windows 执行以规避 VPS 性能不足问题)：
 ```powershell
 $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o server server.go
-
 ```
 
 
@@ -44,48 +53,41 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o server server.go
 ```bash
 scp ./server user@vps_ip:~/traffic-server/
 ./server
-
 ```
 
 
 
-### 3.2 客户端部署
+### 2.2 客户端部署
 
 1. **配置**：修改 `client.go` 中的 `RemoteServer` 为 `http://vps_ip:1234/report`。
 2. **编译** (以 OpenWrt 为例)：
 ```powershell
 $env:GOOS="linux"; $env:GOARCH="mipsle"; go build -o tracker_router client.go
-
 ```
 
 
 
-## 4. 配置说明
+## 3. 配置说明
 
 本系统使用 `.ini` 文件进行配置。出于安全考虑，真实的配置文件已被 `git ignore` 忽略。
 
-### 4.1 获取配置模板
+### 3.1 获取配置模板
 1. 在 `client/` 目录下创建 `ClientSetting.ini`。
 2. 在 `server/` 目录下创建 `ServerSetting.ini`。
 
 您可以参考项目中的 `setting.ini.example` 进行配置。
 
-### 4.2 关键参数说明
+### 3.2 关键参数说明
 | 参数名 | 说明 |
 | :--- | :--- |
 | `MihomoSecret` | 您 Clash/Mihomo 内核设置的 API 密码 |
 | `RemoteToken` | 客户端与服务端通信的鉴权令牌（两端需保持一致） |
 | `EmailPass` | 发送日报的邮箱授权码（建议使用专用的 SMTP 授权码） |
 
-## 5. 待办事项 (Roadmap)
+## 4. 待办事项 (Roadmap)
 
 * [ ] 开发基于 Vue3 的可视化 Web 前端面板。
 * [ ] 增加多用户隔离统计功能。
 * [ ] 支持 Telegram Bot 实时流量查询。
 
 ---
-
-**下一步建议**：
-既然 README 已经写好，你可以通过 `git init` 初始化本地仓库，并使用 `git remote add origin [你的私有仓库链接]` 将代码推送到 GitHub。
-
-**需要我为你编写一个 `.gitignore` 文件，以防止你的 `traffic.db` 数据库和 QQ 邮箱授权码等敏感信息被误上传吗？**

@@ -1,4 +1,5 @@
-﻿# distribute.ps1 - FlowCollect 多平台自动化编译分发脚本
+﻿# warn: 此脚本已过时,202501140936
+# distribute.ps1 - FlowCollect 多平台自动化编译分发脚本
 # 编译输出到: FlowCollect\dist\<版本>\<平台>\
 # 版本格式: 年月日小时 (如: 2024121514)
 

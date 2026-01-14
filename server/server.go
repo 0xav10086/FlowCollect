@@ -137,7 +137,10 @@ func main() {
 	// 1. 流量上报接口
 	r.POST("/report", handleReport)
 
-	// 2. 新增：API 数据接口 (供 Vue3 使用)
+	// 2. 认证接口 (供 Vue3 使用)
+	r.POST("/api/auth", handleAuth)
+
+	// 3. API 数据接口 (供 Vue3 使用)
 	r.GET("/api/stats", handleGetStats)
 
 	confLock.RLock()
@@ -184,7 +187,34 @@ func handleReport(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// 新增：Vue3 后端接口逻辑
+// 处理登录认证
+func handleAuth(c *gin.Context) {
+	var loginReq struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := c.ShouldBindJSON(&loginReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
+		return
+	}
+
+	confLock.RLock()
+	validUser := conf.EmailUser
+	validPass := conf.ServerToken
+	confLock.RUnlock()
+
+	// 校验：EmailUser 必须已配置，且账号密码匹配
+	if validUser != "" && loginReq.Username == validUser && loginReq.Password == validPass {
+		// 登录成功，返回 ServerToken 作为前端的 Bearer Token
+		c.JSON(http.StatusOK, gin.H{"token": validPass})
+		return
+	}
+
+	c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误，请检查 ServerSetting.ini"})
+}
+
+// Vue3 后端接口逻辑
 func handleGetStats(c *gin.Context) {
 	today := time.Now().Truncate(24 * time.Hour)
 

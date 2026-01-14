@@ -1,4 +1,42 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const username = ref('')
+const password = ref('')
+const errorMsg = ref('')
+
+const handleLogin = async () => {
+  // 清空之前的错误信息
+  errorMsg.value = ''
+
+  try {
+    // 发起请求给 Go 后端
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.value,
+        password: password.value
+      })
+    })
+
+    const data = await res.json()
+
+    if (res.ok) {
+      // 登录成功：保存 Token 到 localStorage
+      localStorage.setItem('token', data.token)
+      // 跳转到首页
+      router.push('/home')
+    } else {
+      // 登录失败：显示后端返回的错误信息
+      errorMsg.value = data.error || '登录失败'
+    }
+  } catch (e) {
+    errorMsg.value = '网络连接失败，请检查后端服务'
+  }
+}
 </script>
 
 <template>
@@ -11,13 +49,17 @@
     <div class="login">
       <h2>Login</h2>
       <div class="inputBx">
-        <input type="text" placeholder="Username">
+        <!-- 绑定 v-model -->
+        <input type="text" placeholder="Username" v-model="username">
       </div>
       <div class="inputBx">
-        <input type="password" placeholder="Password">
+        <input type="password" placeholder="Password" v-model="password">
       </div>
+      <!-- 显示错误信息 -->
+      <div v-if="errorMsg" class="error-text">{{ errorMsg }}</div>
       <div class="inputBx">
-        <input type="submit" value="Sign in">
+        <!-- 绑定点击事件 -->
+        <input type="submit" value="Sign in" @click.prevent="handleLogin">
       </div>
       <div class="links">
         <a href="#">Forget Password</a>
@@ -144,5 +186,9 @@
   color: #fff;
   text-decoration: none;
 }
-
+.error-text {
+  color: #ff0057;
+  font-size: 0.9rem;
+  text-align: center;
+}
 </style>
