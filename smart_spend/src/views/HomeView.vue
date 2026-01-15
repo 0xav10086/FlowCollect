@@ -7,7 +7,7 @@
           <button class="action-btn" @click="goToGithub" title="GitHub">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-github"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
           </button>
-          <button class="action-btn" @click="toggleTheme" title="Switch Theme">
+          <button class="action-btn" @click="toggleTheme()" title="Switch Theme">
             <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
           </button>
@@ -84,25 +84,30 @@
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </div>
+    <button class="reset-layout-btn" @click="resetLayout" title="Reset Layout">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+    </button>>
   </div>
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useDark, useToggle } from '@vueuse/core'
+// @ts-ignore Anime.js V4 类型定义缺失
+import { animate } from 'animejs'
+// @ts-ignore Anime.js V4 Draggable 模块
+import { createDraggable } from 'animejs/draggable'
 import ChartContainer from '@/views/ChartContainer.vue'
-import LineChart from '@/views//LineChart.vue'
+import LineChart from '@/views/LineChart.vue'
 
 const router = useRouter()
-const isDark = ref(true)
-
-const toggleTheme = () => {
-  isDark.value = !isDark.value
-}
+const isDark = useDark()
+const toggleTheme = useToggle(isDark)
 
 const handleLogout = () => {
   localStorage.removeItem('token')
@@ -110,15 +115,144 @@ const handleLogout = () => {
 }
 
 const goToGithub = () => {
-  window.open('https://github.com/your-repo/FlowCollect', '_blank')
+  window.open('https://github.com/0xav10086/FlowCollect', '_blank')
 }
 
-// 图表统计数据
-const chartStats = [
-  { id: 1, title: 'Applications', value: '20.5 K', percentage: 30, color: 'pink' },
-  { id: 2, title: 'Shortlisted', value: '5.5 K', percentage: 60, color: 'blue' },
-  { id: 3, title: 'On-hold', value: '10.5 K', percentage: 90, color: 'orange' }
-]
+const resetLayout = () => {
+  const containers = document.querySelectorAll('.chart-container')
+  containers.forEach((el) => {
+    animate(el as HTMLElement, {
+      x: 0,
+      y: 0,
+      easing: 'outElastic(1, .6)'
+    })
+  })
+}
+
+// 格式化流量单位
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!+bytes) return '0 B'
+  const k = 1024
+  const dm = decimals < 0 ? 0 : decimals
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
+}
+
+// 响应式图表数据
+const chartStats = ref<any[]>([])
+
+const fetchStats = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/stats', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await res.json()
+    
+    const stats = []
+    const subStats = data.sub_stats || []
+
+    // --- Chart 1: Proxy 1 Usage (代理1使用量) ---
+    if (subStats.length > 0) {
+      const sub = subStats[0]
+      const pct = sub.Total > 0 ? Math.round((sub.Used / sub.Total) * 100) : 0
+      stats.push({
+        id: 1,
+        title: 'Proxy 1 Usage',
+        value: formatBytes(sub.Used),
+        percentage: pct,
+        color: 'pink'
+      })
+    } else {
+      // Fallback: 如果没有订阅，显示今日代理流量
+      stats.push({
+        id: 1,
+        title: 'Today Proxy',
+        value: formatBytes(data.summary.proxy),
+        percentage: 100,
+        color: 'pink'
+      })
+    }
+
+    // --- Chart 2: Proxy 2 Usage (代理2使用量) OR Today's Local ---
+    if (subStats.length > 1) {
+      const sub = subStats[1]
+      const pct = sub.Total > 0 ? Math.round((sub.Used / sub.Total) * 100) : 0
+      stats.push({
+        id: 2,
+        title: 'Proxy 2 Usage',
+        value: formatBytes(sub.Used),
+        percentage: pct,
+        color: 'blue'
+      })
+    } else {
+      // Fallback: 如果没有第二个订阅，显示今日本地流量 (非常有用的数据)
+      stats.push({
+        id: 2,
+        title: 'Today Local',
+        value: formatBytes(data.summary.local),
+        percentage: 100,
+        color: 'blue'
+      })
+    }
+
+    // --- Chart 3: Remaining (预计结算/剩余流量) ---
+    if (subStats.length > 0) {
+      const sub = subStats[0]
+      const remaining = sub.Total - sub.Used
+      // 计算剩余百分比
+      const pct = sub.Total > 0 ? Math.round((remaining / sub.Total) * 100) : 0
+      stats.push({
+        id: 3,
+        title: 'Remaining',
+        value: formatBytes(remaining),
+        percentage: pct,
+        color: 'orange'
+      })
+    } else {
+      // Fallback: 显示今日总流量
+      stats.push({
+        id: 3,
+        title: 'Total Today',
+        value: formatBytes(data.summary.proxy + data.summary.local),
+        percentage: 100,
+        color: 'orange'
+      })
+    }
+
+    chartStats.value = stats
+  } catch (e) {
+    console.error('Failed to fetch stats:', e)
+    // 出错时保持空或显示默认
+  }
+}
+
+onMounted(() => {
+  fetchStats()
+  
+  const containers = document.querySelectorAll('.chart-container')
+
+  containers.forEach((el) => {
+    const element = el as HTMLElement
+    element.style.cursor = 'grab'
+
+    // 使用 Anime.js V4 的 createDraggable
+    createDraggable(element, {
+      container: '.app-main',
+      // 拖拽开始
+      onDown: () => {
+      element.style.cursor = 'grabbing'
+      element.style.zIndex = '1000'
+      },
+      // 拖拽结束 (释放)
+      onUp: () => {
+        element.style.cursor = 'grab'
+        element.style.zIndex = ''
+      }
+    } as any)
+  })
+})
 
 // 新申请人数据
 const newApplicants = [
@@ -146,7 +280,6 @@ const newApplicants = [
   height: 100%;
   display: flex;
   position: relative;
-  //max-width: 1680px;
   margin: 0 auto;
   font-family: "Poppins", sans-serif;
   background-color: #050e2d;
@@ -199,6 +332,30 @@ const newApplicants = [
   margin: 0;
   font-size: 24px;
   line-height: 32px;
+}
+
+.reset-layout-btn {
+  position: absolute;
+  bottom: 32px;
+  right: 32px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--app-logo);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s;
+  z-index: 2000;
+}
+
+.reset-layout-btn:hover {
+  transform: scale(1.1) rotate(180deg);
+  background-color: #2c6ae4;
 }
 
 .action-buttons {

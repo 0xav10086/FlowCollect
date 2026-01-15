@@ -111,7 +111,7 @@ const circlePath = "M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.915
 }
 
 .percentage {
-  fill: #fff;
+  fill: var(--main-color, #fff);
   font-size: 0.5em;
   text-anchor: middle;
   font-weight: 400;

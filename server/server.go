@@ -240,10 +240,25 @@ func handleGetStats(c *gin.Context) {
 	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("SUM(up_delta + down_delta)").Scan(&summary.Proxy)
 	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("SUM(up_delta + down_delta)").Scan(&summary.Local)
 
+	// 3. 获取最新的订阅快照 (新增)
+	var subStats []SubSnapshot
+	confLock.RLock()
+	subUrls := conf.SubUrls
+	confLock.RUnlock()
+
+	for _, url := range subUrls {
+		var snap SubSnapshot
+		// 查找该URL最新的记录
+		if err := db.Where("sub_url = ?", url).Order("date desc").First(&snap).Error; err == nil {
+			subStats = append(subStats, snap)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"date":       today.Format("2006-01-02"),
 		"summary":    summary,
 		"node_stats": nodeStats,
+		"sub_stats":  subStats,
 	})
 }
 
