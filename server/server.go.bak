@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"math/rand/v2"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -39,6 +41,12 @@ var (
 	confLock sync.RWMutex
 	db       *gorm.DB
 	iniPath  = "ServerSetting.ini"
+
+	// 新增：Fake API 所需的全局变量
+	statsLock    sync.RWMutex
+	currentStats = gin.H{
+		"status": "active",
+	}
 )
 
 func init() {
@@ -107,6 +115,7 @@ type SubSnapshot struct {
 	SubUrl string
 	Used   int64
 	Total  int64
+	Expire int64 // 新增：过期时间戳
 }
 
 func initDB() {
@@ -132,6 +141,9 @@ func main() {
 	})
 	c.Start()
 
+	// 启动时立即更新一次订阅数据
+	go updateSubscriptionData()
+
 	r := gin.Default()
 
 	// 1. 流量上报接口
@@ -142,6 +154,9 @@ func main() {
 
 	// 3. API 数据接口 (供 Vue3 使用)
 	r.GET("/api/stats", handleGetStats)
+
+	// 4. FAKEAPI 数据接口 (供 Vue3 使用)
+	r.GET("/api/fake/stats", handleFakeGetStats)
 
 	confLock.RLock()
 	port := conf.ListenPort
@@ -237,8 +252,9 @@ func handleGetStats(c *gin.Context) {
 		Proxy int64 `json:"proxy"`
 		Local int64 `json:"local"`
 	}
-	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("SUM(up_delta + down_delta)").Scan(&summary.Proxy)
-	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("SUM(up_delta + down_delta)").Scan(&summary.Local)
+	// 使用 COALESCE 处理 NULL 值，防止今日无记录时 Scan 报错
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("COALESCE(SUM(up_delta + down_delta), 0)").Scan(&summary.Proxy)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("COALESCE(SUM(up_delta + down_delta), 0)").Scan(&summary.Local)
 
 	// 3. 获取最新的订阅快照 (新增)
 	var subStats []SubSnapshot
@@ -249,7 +265,7 @@ func handleGetStats(c *gin.Context) {
 	for _, url := range subUrls {
 		var snap SubSnapshot
 		// 查找该URL最新的记录
-		if err := db.Where("sub_url = ?", url).Order("date desc").First(&snap).Error; err == nil {
+		if err := db.Where("sub_url = ?", url).Order("date desc, id desc").First(&snap).Error; err == nil {
 			subStats = append(subStats, snap)
 		}
 	}
@@ -262,24 +278,53 @@ func handleGetStats(c *gin.Context) {
 	})
 }
 
+// 仅供测试使用，这是一个随机流量生成器
+func handleFakeGetStats(c *gin.Context) {
+	statsLock.RLock()
+	defer statsLock.RUnlock()
+
+	// 添加一些额外的假数据
+	response := gin.H{
+		"success": true,
+		"message": "数据获取成功",
+		"data":    currentStats,
+		"system_info": gin.H{
+			"uptime":       fmt.Sprintf("%dh", rand.Intn(100)+1),
+			"load_average": []float64{rand.Float64() * 2, rand.Float64() * 2, rand.Float64() * 2},
+			"last_updated": time.Now().Format("2006-01-02 15:04:05"),
+		},
+		"historical": []gin.H{
+			{
+				"time":  time.Now().Add(-10 * time.Second).Format("15:04:05"),
+				"value": formatNetworkBytes(rand.Float64() * 1e11),
+			},
+			{
+				"time":  time.Now().Add(-5 * time.Second).Format("15:04:05"),
+				"value": formatNetworkBytes(rand.Float64() * 1e11),
+			},
+		},
+	}
+	c.JSON(http.StatusOK, response)
+}
+
 // --- 业务逻辑 ---
 
-func fetchSubInfo(url string) (used, total int64, err error) {
+func fetchSubInfo(url string) (used, total, expire int64, err error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	defer resp.Body.Close()
 
 	// 解析机场特有的 Subscription-Userinfo 响应头
 	info := resp.Header.Get("Subscription-Userinfo")
 	if info == "" {
-		return 0, 0, fmt.Errorf("未找到流量头信息")
+		return 0, 0, 0, fmt.Errorf("未找到流量头信息")
 	}
 
 	parts := strings.Split(info, ";")
-	var up, down int64
+	var up, down, exp int64
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if strings.HasPrefix(p, "upload=") {
@@ -288,9 +333,11 @@ func fetchSubInfo(url string) (used, total int64, err error) {
 			down, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
 		} else if strings.HasPrefix(p, "total=") {
 			total, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+		} else if strings.HasPrefix(p, "expire=") {
+			exp, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
 		}
 	}
-	return up + down, total, nil
+	return up + down, total, exp, nil
 }
 
 func processDailyReport() {
@@ -310,9 +357,9 @@ func processDailyReport() {
 	subMsg := "【机场详情】\n"
 	var totalAirportUsageToday int64
 	for _, url := range subUrls {
-		used, total, err := fetchSubInfo(url)
+		used, total, expire, err := fetchSubInfo(url)
 		if err == nil {
-			db.Create(&SubSnapshot{Date: today, SubUrl: url, Used: used, Total: total})
+			db.Create(&SubSnapshot{Date: today, SubUrl: url, Used: used, Total: total, Expire: expire})
 
 			var lastSub SubSnapshot
 			db.Where("sub_url = ? AND date < ?", url, today).Order("date desc").First(&lastSub)
@@ -361,6 +408,26 @@ func processDailyReport() {
 	log.Printf("日报邮件已发送至: %s", emailTo)
 }
 
+// 启动时更新订阅数据 (不发送邮件)
+func updateSubscriptionData() {
+	log.Println("正在执行启动时订阅数据更新...")
+	today := time.Now().Truncate(24 * time.Hour)
+
+	confLock.RLock()
+	subUrls := conf.SubUrls
+	confLock.RUnlock()
+
+	for _, url := range subUrls {
+		used, total, expire, err := fetchSubInfo(url)
+		if err == nil {
+			db.Create(&SubSnapshot{Date: today, SubUrl: url, Used: used, Total: total, Expire: expire})
+			log.Printf("订阅 [%s] 更新成功 | 已用: %s", url, formatBytes(used))
+		} else {
+			log.Printf("订阅 [%s] 更新失败: %v", url, err)
+		}
+	}
+}
+
 func sendEmail(subject, body string) {
 	// 获取邮件配置
 	confLock.RLock()
@@ -396,6 +463,17 @@ func sendEmail(subject, body string) {
 	if err != nil {
 		log.Println("邮件发送失败:", err)
 	}
+}
+
+// 新增：格式化网络流量 (供 Fake API 使用)
+func formatNetworkBytes(v float64) string {
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	i := 0
+	for v >= 1024 && i < len(units)-1 {
+		v /= 1024
+		i++
+	}
+	return fmt.Sprintf("%.2f %s", v, units[i])
 }
 
 func formatBytes(b int64) string {

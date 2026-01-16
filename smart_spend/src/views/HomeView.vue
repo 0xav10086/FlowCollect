@@ -2,7 +2,7 @@
   <div class="app-container" :class="{ 'light-mode': !isDark }">
     <div class="app-main">
       <div class="main-header-line">
-        <h1>Applications Dashboard</h1>
+        <h1>FlowCOllect Dashboard</h1>
         <div class="action-buttons">
           <button class="action-btn" @click="goToGithub" title="GitHub">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-github"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
@@ -139,6 +139,15 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
+// 提取机场名称 (域名)
+const getAirportName = (url: string) => {
+  try {
+    return new URL(url).hostname.replace('www.', '')
+  } catch {
+    return 'Proxy Provider'
+  }
+}
+
 // 响应式图表数据
 const chartStats = ref<any[]>([])
 
@@ -157,15 +166,18 @@ const fetchStats = async () => {
     if (subStats.length > 0) {
       const sub = subStats[0]
       const pct = sub.Total > 0 ? Math.round((sub.Used / sub.Total) * 100) : 0
+      console.log(sub + " Proxy 1 Usage")
+      console.log(pct + " Proxy 1 Usage")
       stats.push({
         id: 1,
-        title: 'Proxy 1 Usage',
+        title: getAirportName(sub.SubUrl), // 使用机场域名
         value: formatBytes(sub.Used),
         percentage: pct,
         color: 'pink'
       })
     } else {
       // Fallback: 如果没有订阅，显示今日代理流量
+      console.log("没有订阅，显示今日代理流量")
       stats.push({
         id: 1,
         title: 'Today Proxy',
@@ -179,15 +191,18 @@ const fetchStats = async () => {
     if (subStats.length > 1) {
       const sub = subStats[1]
       const pct = sub.Total > 0 ? Math.round((sub.Used / sub.Total) * 100) : 0
+      console.log(sub + " Proxy 2 Usage")
+      console.log(pct + " Proxy 2 Usage")
       stats.push({
         id: 2,
-        title: 'Proxy 2 Usage',
+        title: getAirportName(sub.SubUrl), // 使用机场域名
         value: formatBytes(sub.Used),
         percentage: pct,
         color: 'blue'
       })
     } else {
       // Fallback: 如果没有第二个订阅，显示今日本地流量 (非常有用的数据)
+      console.log("没有第二个订阅，显示今日本地流量")
       stats.push({
         id: 2,
         title: 'Today Local',
@@ -203,9 +218,20 @@ const fetchStats = async () => {
       const remaining = sub.Total - sub.Used
       // 计算剩余百分比
       const pct = sub.Total > 0 ? Math.round((remaining / sub.Total) * 100) : 0
+      console.log(sub + " Proxy Remaining")
+      console.log(remaining + " Proxy Remaining")
+      console.log(pct + " Proxy Remaining")
+      // 计算过期剩余天数
+      let title = 'Remaining Data'
+      if (sub.Expire) {
+        const now = Math.floor(Date.now() / 1000)
+        const daysLeft = Math.ceil((sub.Expire - now) / 86400)
+        title = `Expires in ${daysLeft} Days`
+      }
+
       stats.push({
         id: 3,
-        title: 'Remaining',
+        title: title,
         value: formatBytes(remaining),
         percentage: pct,
         color: 'orange'
