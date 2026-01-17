@@ -1,6 +1,3 @@
-//go:build server
-// +build server
-
 // 通用工具函数（如流量格式化）
 
 package main

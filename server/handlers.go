@@ -1,6 +1,3 @@
-//go:build server
-// +build server
-
 // HTTP 路由处理函数（Report, Auth, Stats）
 
 package main

@@ -1,6 +1,3 @@
-//go:build server
-// +build server
-
 // Test 模块。包含 Fake API 的处理逻辑和随机数据生成
 
 package main

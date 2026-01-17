@@ -1,6 +1,3 @@
-//go:build server
-// +build server
-
 // 业务逻辑。包含订阅抓取、日报处理、邮件发送等核心逻辑
 
 package main
@@ -16,33 +13,95 @@ import (
 )
 
 func fetchSubInfo(url string) (used, total, expire int64, err error) {
+	log.Printf("开始从 %s 获取订阅信息", url)
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		log.Printf("创建请求失败: %v", err)
 		return 0, 0, 0, err
+	}
+	// 伪装成 Clash 客户端，确保服务器返回 Subscription-Userinfo 头
+	req.Header.Set("User-Agent", "Clash/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("HTTP请求失败: %v", err)
+		return 0, 0, 0, fmt.Errorf("请求订阅链接失败: %v", err)
 	}
 	defer resp.Body.Close()
 
+	// 检查 HTTP 状态码
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("HTTP状态码异常: %d %s", resp.StatusCode, resp.Status)
+		return 0, 0, 0, fmt.Errorf("服务器返回错误状态码: %d %s",
+			resp.StatusCode, resp.Status)
+	}
+
 	info := resp.Header.Get("Subscription-Userinfo")
+	log.Printf("从 %s 获取到的流量头信息: %s", url, info)
+
 	if info == "" {
-		return 0, 0, 0, fmt.Errorf("未找到流量头信息")
+		log.Printf("未找到 Subscription-Userinfo 头信息")
+		return 0, 0, 0, fmt.Errorf("响应中未找到订阅信息头")
 	}
 
 	parts := strings.Split(info, ";")
-	var up, down, exp int64
+	var up, down, totalRaw, exp int64
+
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if strings.HasPrefix(p, "upload=") {
-			up, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			val, err := strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			if err != nil {
+				log.Printf("解析 upload 失败: %v", err)
+				continue
+			}
+			if val < 0 {
+				log.Printf("upload 值为负数: %d", val)
+			}
+			up = val
 		} else if strings.HasPrefix(p, "download=") {
-			down, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			val, err := strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			if err != nil {
+				log.Printf("解析 download 失败: %v", err)
+				continue
+			}
+			if val < 0 {
+				log.Printf("download 值为负数: %d", val)
+			}
+			down = val
 		} else if strings.HasPrefix(p, "total=") {
-			total, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			val, err := strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			if err != nil {
+				log.Printf("解析 total 失败: %v", err)
+				continue
+			}
+			if val < 0 {
+				log.Printf("total 值为负数: %d", val)
+				return 0, 0, 0, fmt.Errorf("总流量不能为负数: %d", val)
+			}
+			totalRaw = val
 		} else if strings.HasPrefix(p, "expire=") {
-			exp, _ = strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			val, err := strconv.ParseInt(strings.Split(p, "=")[1], 10, 64)
+			if err != nil {
+				log.Printf("解析 expire 失败: %v", err)
+				continue
+			}
+			if val < 0 {
+				log.Printf("expire 值为负数: %d", val)
+				return 0, 0, 0, fmt.Errorf("过期时间不能为负数: %d", val)
+			}
+			exp = val
 		}
 	}
-	return up + down, total, exp, nil
+
+	// 计算已使用流量（如果上传下载不存在则视为0）
+	used = up + down
+
+	log.Printf("解析结果: 已使用=%d, 总流量=%d, 过期时间=%d", used, totalRaw, exp)
+
+	return used, totalRaw, exp, nil
 }
 
 func processDailyReport() {

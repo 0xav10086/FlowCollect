@@ -1,6 +1,3 @@
-//go:build server
-// +build server
-
 // 配置管理。负责加载/监听 ServerSetting.ini
 
 package main

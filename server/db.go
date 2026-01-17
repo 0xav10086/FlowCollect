@@ -1,6 +1,3 @@
-//go:build server
-// +build server
-
 // 数据库模型定义与初始化
 
 package main
