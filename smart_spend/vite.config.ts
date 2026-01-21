@@ -44,7 +44,7 @@ export default defineConfig({
 
     // 开发服务器配置
     server: {
-        port: 3000,
+        port: 8687,
         open: true, // 自动打开浏览器
         host: true, // 监听所有地址
         proxy: {
