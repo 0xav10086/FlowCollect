@@ -17,6 +17,8 @@ var (
 	currentStats = gin.H{
 		"status": "active",
 	}
+	// 记录设备启动时间，保证 uptime 稳定增长
+	deviceStartTimes = make(map[string]time.Time)
 )
 
 // 仅供测试使用，这是一个随机流量生成器
@@ -33,6 +35,9 @@ func handleFakeGetStats(c *gin.Context) {
 
 	nodeNames := []string{"Hong Kong 01", "Japan 02", "USA 03", "Singapore 04", "Taiwan 05", "Korea 06", "Direct"}
 
+	// 临时存储节点流量值，用于后续分配给设备
+	nodeValues := make(map[string]int64)
+
 	var dist []gin.H
 	var totalTraffic int64 = 0 // 用于存储累加后的总流量
 
@@ -43,6 +48,7 @@ func handleFakeGetStats(c *gin.Context) {
 		val := rand.Int64N((MaxTraffic - MinTraffic) + MinTraffic)
 
 		totalTraffic += val
+		nodeValues[name] = val
 
 		dist = append(dist, gin.H{
 			"name":  name,
@@ -50,7 +56,60 @@ func handleFakeGetStats(c *gin.Context) {
 		})
 	}
 
-	// 3. 构建响应，确保 data 中的总流量等于 totalTraffic
+	// 3. 生成设备统计数据 (Device Stats)
+	// 定义设备与节点的映射关系，确保数据逻辑自洽
+	deviceMap := map[string][]string{
+		"OpenWrt Gateway": {"Hong Kong 01", "Singapore 04", "Taiwan 05"},
+		"Windows PC":      {"Japan 02", "USA 03", "Direct"},
+		"Android Phone":   {"Korea 06"},
+	}
+
+	var deviceStats []gin.H
+	for devName, nodes := range deviceMap {
+		// 初始化设备启动时间 (如果不存在)
+		if _, ok := deviceStartTimes[devName]; !ok {
+			// 随机生成 1小时 到 7天前
+			deviceStartTimes[devName] = time.Now().Add(-time.Duration(rand.Int64N(7*24*3600)+3600) * time.Second)
+		}
+
+		var devCurrent int64 = 0
+		var devNodeDetails []gin.H
+
+		// 计算该设备本次更新使用的流量（基于分配的节点）
+		for _, nodeName := range nodes {
+			if val, ok := nodeValues[nodeName]; ok {
+				devCurrent += val
+				devNodeDetails = append(devNodeDetails, gin.H{
+					"name":            nodeName,
+					"value":           val,
+					"formatted_value": formatNetworkBytes(float64(val)),
+				})
+			}
+		}
+
+		// 模拟总流量 (本次流量 + 随机历史基数)
+		devTotal := devCurrent + rand.Int64N(500*MB)
+
+		// 模拟连接数
+		activeConns := rand.IntN(50) + 5
+		closedConns := rand.IntN(200) + 20
+		uptime := int64(time.Since(deviceStartTimes[devName]).Seconds())
+
+		deviceStats = append(deviceStats, gin.H{
+			"device_name":        devName,
+			"current_traffic":    devCurrent,
+			"formatted_current":  formatNetworkBytes(float64(devCurrent)),
+			"total_traffic":      devTotal,
+			"formatted_total":    formatNetworkBytes(float64(devTotal)),
+			"active_connections": activeConns,
+			"closed_connections": closedConns,
+			"total_connections":  activeConns + closedConns,
+			"node_usage":         devNodeDetails,
+			"uptime":             uptime,
+		})
+	}
+
+	// 4. 构建响应，确保 data 中的总流量等于 totalTraffic
 	response := gin.H{
 		"success": true,
 		"message": "数据获取成功",
@@ -70,6 +129,7 @@ func handleFakeGetStats(c *gin.Context) {
 			{"time": time.Now().Add(-5 * time.Second).Format("15:04:05"), "value": formatNetworkBytes(float64(totalTraffic))},
 		},
 		"node_distribution": dist,
+		"device_stats":      deviceStats,
 	}
 
 	c.JSON(http.StatusOK, response)
