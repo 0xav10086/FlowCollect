@@ -27,46 +27,84 @@
                 <stop offset="0%" style="stop-color:rgba(0, 199, 214, 0.4);stop-opacity:1" />
                 <stop offset="100%" style="stop-color:rgba(0, 199, 214, 0.05);stop-opacity:0" />
               </linearGradient>
+              <!-- Green Gradient (Real Up) -->
+              <linearGradient id="realUpGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:rgba(97, 225, 161, 0.4);stop-opacity:1" />
+                <stop offset="100%" style="stop-color:rgba(97, 225, 161, 0.05);stop-opacity:0" />
+              </linearGradient>
               <!-- Red Gradient (Fake) -->
               <linearGradient id="fakeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" style="stop-color:rgba(255, 92, 92, 0.4);stop-opacity:1" />
                 <stop offset="100%" style="stop-color:rgba(255, 92, 92, 0.05);stop-opacity:0" />
               </linearGradient>
+              <!-- Light Red Gradient (Fake Up) -->
+              <linearGradient id="fakeUpGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:rgba(255, 154, 154, 0.4);stop-opacity:1" />
+                <stop offset="100%" style="stop-color:rgba(255, 154, 154, 0.05);stop-opacity:0" />
+              </linearGradient>
             </defs>
 
             <!-- Fake Data (Red) -->
-            <path :d="fakeAreaPath" fill="url(#fakeGradient)" class="chart-area fake" style="opacity: 0;" />
-            <path :d="fakeLinePath" fill="none" stroke="#ff5c5c" stroke-width="2" class="chart-line fake" stroke-linecap="round" stroke-linejoin="round" />
+            <path :d="fakeUpAreaPath" fill="url(#fakeUpGradient)" class="chart-area fake-up" style="opacity: 0;" />
+            <path :d="fakeDownAreaPath" fill="url(#fakeGradient)" class="chart-area fake-down" style="opacity: 0;" />
+            <path :d="fakeUpLinePath" fill="none" stroke="#ff9a9a" stroke-width="2" class="chart-line fake-up" stroke-linecap="round" stroke-linejoin="round" />
+            <path :d="fakeDownLinePath" fill="none" stroke="#ff5c5c" stroke-width="2" class="chart-line fake-down" stroke-linecap="round" stroke-linejoin="round" />
             
             <!-- Real Data (Blue) -->
-            <path :d="realAreaPath" fill="url(#realGradient)" class="chart-area real" style="opacity: 0;" />
-            <path :d="realLinePath" fill="none" stroke="#00c7d6" stroke-width="2" class="chart-line real" stroke-linecap="round" stroke-linejoin="round" />
+            <path :d="realUpAreaPath" fill="url(#realUpGradient)" class="chart-area real-up" style="opacity: 0;" />
+            <path :d="realDownAreaPath" fill="url(#realGradient)" class="chart-area real-down" style="opacity: 0;" />
+            <path :d="realUpLinePath" fill="none" stroke="#61e1a1" stroke-width="2" class="chart-line real-up" stroke-linecap="round" stroke-linejoin="round" />
+            <path :d="realDownLinePath" fill="none" stroke="#00c7d6" stroke-width="2" class="chart-line real-down" stroke-linecap="round" stroke-linejoin="round" />
 
             <!-- Points (Real) -->
             <circle
-                v-for="(p, index) in realPoints"
+                v-for="(p, index) in realUpPoints"
                 :key="'real-'+p.id"
+                :cx="p.x"
+                :cy="p.y"
+                r="3"
+                fill="#01081f"
+                stroke="#61e1a1"
+                stroke-width="2"
+                class="chart-point real-up"
+                style="opacity: 0;"
+            />
+            <circle
+                v-for="(p, index) in realDownPoints"
+                :key="'real-down-'+p.id"
                 :cx="p.x"
                 :cy="p.y"
                 r="3"
                 fill="#01081f"
                 stroke="#00c7d6"
                 stroke-width="2"
-                class="chart-point real"
+                class="chart-point real-down"
                 style="opacity: 0;"
             />
             
             <!-- Points (Fake) -->
             <circle
-                v-for="(p, index) in fakePoints"
-                :key="'fake-'+p.id"
+                v-for="(p, index) in fakeUpPoints"
+                :key="'fake-up-'+p.id"
+                :cx="p.x"
+                :cy="p.y"
+                r="3"
+                fill="#01081f"
+                stroke="#ff9a9a"
+                stroke-width="2"
+                class="chart-point fake-up"
+                style="opacity: 0;"
+            />
+            <circle
+                v-for="(p, index) in fakeDownPoints"
+                :key="'fake-down-'+p.id"
                 :cx="p.x"
                 :cy="p.y"
                 r="3"
                 fill="#01081f"
                 stroke="#ff5c5c"
                 stroke-width="2"
-                class="chart-point fake"
+                class="chart-point fake-down"
                 style="opacity: 0;"
             />
 
@@ -85,11 +123,17 @@
           <!-- Tooltip -->
           <div v-if="hoverInfo.visible" class="chart-tooltip" :class="hoverInfo.align" :style="{ left: hoverInfo.x + 'px', top: '10px' }">
             <div class="tooltip-time">{{ hoverInfo.time }}</div>
-            <div class="tooltip-item real">
-              <span class="dot"></span> Real: {{ hoverInfo.realVal }}
+            <div class="tooltip-item real-down">
+              <span class="dot"></span> Real Down: {{ hoverInfo.realDownVal }}
             </div>
-            <div class="tooltip-item fake">
-              <span class="dot"></span> Fake: {{ hoverInfo.fakeVal }}
+            <div class="tooltip-item real-up">
+              <span class="dot"></span> Real Up: {{ hoverInfo.realUpVal }}
+            </div>
+            <div class="tooltip-item fake-down">
+              <span class="dot"></span> Fake Down: {{ hoverInfo.fakeDownVal }}
+            </div>
+            <div class="tooltip-item fake-up">
+              <span class="dot"></span> Fake Up: {{ hoverInfo.fakeUpVal }}
             </div>
           </div>
 
@@ -126,12 +170,17 @@ const chartWrapperRef = ref<HTMLElement | null>(null)
 const width = ref(0)
 const height = ref(0)
 
-const realPoints = ref<DataPoint[]>([])
-const fakePoints = ref<DataPoint[]>([])
+const realUpPoints = ref<DataPoint[]>([])
+const realDownPoints = ref<DataPoint[]>([])
+const fakeUpPoints = ref<DataPoint[]>([])
+const fakeDownPoints = ref<DataPoint[]>([])
 
 const timeRangeIndex = ref(0)
 const isAnimating = ref(false)
-const hoverInfo = ref({ visible: false, x: 0, time: '', realVal: '', fakeVal: '', align: 'center' })
+const hoverInfo = ref({
+  visible: false, x: 0, time: '', align: 'center',
+  realUpVal: '', realDownVal: '', fakeUpVal: '', fakeDownVal: ''
+})
 const now = ref(new Date()) // Reactive time for X-axis
 
 let resizeObserver: ResizeObserver | null = null
@@ -170,23 +219,23 @@ const formatBytes = (bytes: number) => {
 }
 
 // Fetch Real Data (Blue)
-const fetchRealStats = async (): Promise<number> => {
+const fetchRealStats = async (): Promise<[number, number]> => {
   try {
     const token = localStorage.getItem('token')
     const res = await fetch('/api/stats', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    if (!res.ok) return 0
+    if (!res.ok) return [0, 0]
     const json = await res.json()
     // 使用 summary.proxy 作为实时数据点
-    return json.summary ? json.summary.proxy : 0
+    return json.summary ? [json.summary.proxy_up, json.summary.proxy_down] : [0, 0]
   } catch {
-    return 0
+    return [0, 0]
   }
 }
 
 // Fetch Fake Data (Red)
-const fetchFakeStats = async (): Promise<number> => {
+const fetchFakeStats = async (): Promise<[number, number]> => {
   try {
     const token = localStorage.getItem('token')
     const res = await fetch('/api/fake/stats', {
@@ -197,11 +246,14 @@ const fetchFakeStats = async (): Promise<number> => {
     }
     const json = await res.json()
     if (json.historical && json.historical.length > 0) {
-      return parseBytes(json.historical[0].value)
+      const latest = json.historical[0]
+      return [parseBytes(latest.up_value), parseBytes(latest.down_value)]
     }
-    return 0
+    return [0, 0]
   } catch (e) {
-    return Math.random() * 1024 * 1024 * 100 // Fallback random
+    const randomUp = Math.random() * 1024 * 1024 * 20; // up to 20MB
+    const randomDown = Math.random() * 1024 * 1024 * 100; // up to 100MB
+    return [randomUp, randomDown] // Fallback random
   }
 }
 
@@ -215,9 +267,11 @@ const updateDimensions = () => {
 }
 
 const getMaxVal = () => {
-  const maxReal = Math.max(...realPoints.value.map(p => p.val), 0)
-  const maxFake = Math.max(...fakePoints.value.map(p => p.val), 0)
-  return Math.max(maxReal, maxFake, 1) * 1.2 // 20% padding
+  const maxRealUp = Math.max(...realUpPoints.value.map(p => p.val), 0)
+  const maxRealDown = Math.max(...realDownPoints.value.map(p => p.val), 0)
+  const maxFakeUp = Math.max(...fakeUpPoints.value.map(p => p.val), 0)
+  const maxFakeDown = Math.max(...fakeDownPoints.value.map(p => p.val), 0)
+  return Math.max(maxRealUp, maxRealDown, maxFakeUp, maxFakeDown, 1) * 1.2 // 20% padding
 }
 
 const calculateY = (val: number, max: number) => {
@@ -229,7 +283,7 @@ const calculateY = (val: number, max: number) => {
 }
 
 const recalcPoints = () => {
-  if (realPoints.value.length === 0) return
+  if (realDownPoints.value.length === 0) return
   const step = width.value / (ranges[timeRangeIndex.value].points - 1)
   const max = getMaxVal()
 
@@ -238,8 +292,10 @@ const recalcPoints = () => {
     p.y = calculateY(p.val, max)
   }
 
-  realPoints.value.forEach(updateP)
-  fakePoints.value.forEach(updateP)
+  realUpPoints.value.forEach(updateP)
+  realDownPoints.value.forEach(updateP)
+  fakeUpPoints.value.forEach(updateP)
+  fakeDownPoints.value.forEach(updateP)
 }
 
 // --- Computed Paths ---
@@ -256,10 +312,15 @@ const getAreaPath = (pts: DataPoint[]) => {
   return `${line} L ${last.x} ${height.value} L ${first.x} ${height.value} Z`
 }
 
-const realLinePath = computed(() => getLinePath(realPoints.value))
-const realAreaPath = computed(() => getAreaPath(realPoints.value))
-const fakeLinePath = computed(() => getLinePath(fakePoints.value))
-const fakeAreaPath = computed(() => getAreaPath(fakePoints.value))
+const realUpLinePath = computed(() => getLinePath(realUpPoints.value))
+const realUpAreaPath = computed(() => getAreaPath(realUpPoints.value))
+const realDownLinePath = computed(() => getLinePath(realDownPoints.value))
+const realDownAreaPath = computed(() => getAreaPath(realDownPoints.value))
+
+const fakeUpLinePath = computed(() => getLinePath(fakeUpPoints.value))
+const fakeUpAreaPath = computed(() => getAreaPath(fakeUpPoints.value))
+const fakeDownLinePath = computed(() => getLinePath(fakeDownPoints.value))
+const fakeDownAreaPath = computed(() => getAreaPath(fakeDownPoints.value))
 
 const yLabels = computed(() => {
   const max = getMaxVal() / 1.2 // Remove padding for label calculation
@@ -298,7 +359,7 @@ const xLabels = computed(() => {
 
 // --- Interaction ---
 const handleMouseMove = (e: MouseEvent) => {
-  if (realPoints.value.length === 0) return
+  if (realDownPoints.value.length === 0) return
   const rect = (e.target as Element).closest('svg')?.getBoundingClientRect()
   if (!rect) return
   
@@ -308,10 +369,12 @@ const handleMouseMove = (e: MouseEvent) => {
   // Find closest index
   let index = Math.round(mouseX / step)
   if (index < 0) index = 0
-  if (index >= realPoints.value.length) index = realPoints.value.length - 1
+  if (index >= realDownPoints.value.length) index = realDownPoints.value.length - 1
 
-  const realP = realPoints.value[index]
-  const fakeP = fakePoints.value[index]
+  const realUpP = realUpPoints.value[index]
+  const realDownP = realDownPoints.value[index]
+  const fakeUpP = fakeUpPoints.value[index]
+  const fakeDownP = fakeDownPoints.value[index]
   
   // Get time label
   const range = ranges[timeRangeIndex.value]
@@ -322,15 +385,17 @@ const handleMouseMove = (e: MouseEvent) => {
 
   // Calculate alignment to prevent clipping
   let align = 'center'
-  if (index === 0) align = 'left'
-  else if (index === realPoints.value.length - 1) align = 'right'
+  if (index < 2) align = 'left'
+  else if (index > realDownPoints.value.length - 3) align = 'right'
 
   hoverInfo.value = {
     visible: true,
-    x: realP.x,
+    x: realDownP.x,
     time: timeStr,
-    realVal: formatBytes(realP.val),
-    fakeVal: formatBytes(fakeP.val),
+    realUpVal: formatBytes(realUpP.val),
+    realDownVal: formatBytes(realDownP.val),
+    fakeUpVal: formatBytes(fakeUpP.val),
+    fakeDownVal: formatBytes(fakeDownP.val),
     align
   }
 }
@@ -356,7 +421,7 @@ const playInitialAnimation = async () => {
   await animate(pointEls, {
     opacity: [0, 1], // 出现
     scale: [0.33, 1], // 直径 1 -> 3 (r=1.5, so 0.33*3 ≈ 1, 1*3 = 3)
-    delay: stagger(1000 / pointEls.length), // 依次显示
+    delay: stagger(1000 / (pointEls.length / 4)), // 依次显示
     duration: 800,
     easing: 'easeOutElastic(1, .6)'
   }).finished
@@ -405,7 +470,7 @@ const updateChart = async () => {
   now.value = new Date()
 
   // Fetch new data
-  const [realVal, fakeVal] = await Promise.all([fetchRealStats(), fetchFakeStats()])
+  const [[realUpVal, realDownVal], [fakeUpVal, fakeDownVal]] = await Promise.all([fetchRealStats(), fetchFakeStats()])
 
   // Prepare new point state
   const step = width.value / (ranges[timeRangeIndex.value].points - 1)
@@ -414,24 +479,31 @@ const updateChart = async () => {
     id: uid++, val, x: width.value + step, y: height.value
   })
 
-  const newReal = createPoint(realVal)
-  const newFake = createPoint(fakeVal)
+  const newRealUp = createPoint(realUpVal)
+  const newRealDown = createPoint(realDownVal)
+  const newFakeUp = createPoint(fakeUpVal)
+  const newFakeDown = createPoint(fakeDownVal)
 
   // Add to array temporarily to calculate Y scale
-  const tempReal = [...realPoints.value, newReal]
-  const tempFake = [...fakePoints.value, newFake]
-  
-  const maxReal = Math.max(...tempReal.map(p => p.val), 0)
-  const maxFake = Math.max(...tempFake.map(p => p.val), 0)
-  const max = Math.max(maxReal, maxFake, 1) * 1.2
+  const max = Math.max(
+    ...[...realUpPoints.value, newRealUp].map(p => p.val),
+    ...[...realDownPoints.value, newRealDown].map(p => p.val),
+    ...[...fakeUpPoints.value, newFakeUp].map(p => p.val),
+    ...[...fakeDownPoints.value, newFakeDown].map(p => p.val),
+    1
+  ) * 1.2
 
   // Update Y for new point
-  newReal.y = calculateY(realVal, max)
-  newFake.y = calculateY(fakeVal, max)
+  newRealUp.y = calculateY(realUpVal, max)
+  newRealDown.y = calculateY(realDownVal, max)
+  newFakeUp.y = calculateY(fakeUpVal, max)
+  newFakeDown.y = calculateY(fakeDownVal, max)
 
   // Push new point to reactive array
-  realPoints.value.push(newReal)
-  fakePoints.value.push(newFake)
+  realUpPoints.value.push(newRealUp)
+  realDownPoints.value.push(newRealDown)
+  fakeUpPoints.value.push(newFakeUp)
+  fakeDownPoints.value.push(newFakeDown)
 
   // 等待 DOM 更新，以便获取新生成的点元素
   await nextTick()
@@ -439,14 +511,19 @@ const updateChart = async () => {
   // 获取 DOM 元素
   const allRealPoints = document.querySelectorAll('.chart-point.real')
   const allFakePoints = document.querySelectorAll('.chart-point.fake')
+  const allRealUpPoints = document.querySelectorAll('.chart-point.real-up')
+  const allRealDownPoints = document.querySelectorAll('.chart-point.real-down')
+  const allFakeUpPoints = document.querySelectorAll('.chart-point.fake-up')
+  const allFakeDownPoints = document.querySelectorAll('.chart-point.fake-down')
   
   // 这里的逻辑是：数组长度现在是 13 (12旧 + 1新)
   // index 0 是要移除的最左侧点
   // index 12 (length-1) 是新加入的最右侧点
-  const oldRealPoint = allRealPoints[0]
-  const newRealPoint = allRealPoints[allRealPoints.length - 1]
-  const oldFakePoint = allFakePoints[0]
-  const newFakePoint = allFakePoints[allFakePoints.length - 1]
+  const oldPoints = [allRealUpPoints[0], allRealDownPoints[0], allFakeUpPoints[0], allFakeDownPoints[0]]
+  const newPoints = [
+    allRealUpPoints[allRealUpPoints.length - 1], allRealDownPoints[allRealDownPoints.length - 1],
+    allFakeUpPoints[allFakeUpPoints.length - 1], allFakeDownPoints[allFakeDownPoints.length - 1]
+  ]
 
   // 动画配置
   const animProps = {
@@ -459,11 +536,13 @@ const updateChart = async () => {
   // 并行执行所有动画
   await Promise.all([
     // 1. 数据点位移 (Vue 响应式数据驱动 cx/cy)
-    animate(realPoints.value, animProps).finished,
-    animate(fakePoints.value, animProps).finished,
+    animate(realUpPoints.value, animProps).finished,
+    animate(realDownPoints.value, animProps).finished,
+    animate(fakeUpPoints.value, animProps).finished,
+    animate(fakeDownPoints.value, animProps).finished,
 
     // 2. 最左侧点：由大变小 (DOM 样式驱动)
-    animate([oldRealPoint, oldFakePoint], {
+    animate(oldPoints, {
       scale: [1, 0.33],
       opacity: [1, 0],
       duration: 1000,
@@ -471,7 +550,7 @@ const updateChart = async () => {
     }).finished,
 
     // 3. 最右侧新点：由小变大 (DOM 样式驱动)
-    animate([newRealPoint, newFakePoint], {
+    animate(newPoints, {
       scale: [0.33, 1], // 直径 1 -> 3
       opacity: [0, 1],  // 修复：新点必须显式设置透明度为 1
       duration: 1000,
@@ -480,13 +559,17 @@ const updateChart = async () => {
   ])
 
   // Remove the first point (now off-screen)
-  realPoints.value.shift()
-  fakePoints.value.shift()
+  realUpPoints.value.shift()
+  realDownPoints.value.shift()
+  fakeUpPoints.value.shift()
+  fakeDownPoints.value.shift()
 
   // Reset X coordinates to canonical positions (0, step, 2*step...)
   const resetX = (p: DataPoint, i: number) => { p.x = i * step }
-  realPoints.value.forEach(resetX)
-  fakePoints.value.forEach(resetX)
+  realUpPoints.value.forEach(resetX)
+  realDownPoints.value.forEach(resetX)
+  fakeUpPoints.value.forEach(resetX)
+  fakeDownPoints.value.forEach(resetX)
 
   // 动画完成，区域颜色加深一下作为反馈
   const areaEls = document.querySelectorAll('.chart-area')
@@ -502,8 +585,10 @@ const updateChart = async () => {
 // --- Lifecycle ---
 const initData = async () => {
   stopPolling()
-  realPoints.value = []
-  fakePoints.value = []
+  realUpPoints.value = []
+  realDownPoints.value = []
+  fakeUpPoints.value = []
+  fakeDownPoints.value = []
   now.value = new Date()
 
   // Generate/Fetch initial 12 points
@@ -511,10 +596,12 @@ const initData = async () => {
   const step = width.value / (count - 1)
 
   for (let i = 0; i < count; i++) {
-    const [realVal, fakeVal] = await Promise.all([fetchRealStats(), fetchFakeStats()])
+    const [[realUp, realDown], [fakeUp, fakeDown]] = await Promise.all([fetchRealStats(), fetchFakeStats()])
     const createP = (val: number) => ({ id: uid++, val, x: i * step, y: height.value })
-    realPoints.value.push(createP(realVal))
-    fakePoints.value.push(createP(fakeVal))
+    realUpPoints.value.push(createP(realUp))
+    realDownPoints.value.push(createP(realDown))
+    fakeUpPoints.value.push(createP(fakeUp))
+    fakeDownPoints.value.push(createP(fakeDown))
   }
 
   recalcPoints()
@@ -607,12 +694,14 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 16px;
   opacity: 0.8;
+  font-size: 20px;
 }
 
 .chart-container-header span {
   color: var(--app-logo, #3d7eff);
   font-size: 12px;
   line-height: 16px;
+  font-size: 16px;
 }
 
 .chart-body {
@@ -703,8 +792,10 @@ onUnmounted(() => {
   margin-top: 2px;
 }
 
-.tooltip-item.real { color: #00c7d6; }
-.tooltip-item.fake { color: #ff5c5c; }
+.tooltip-item.real-down { color: #00c7d6; }
+.tooltip-item.real-up { color: #61e1a1; }
+.tooltip-item.fake-down { color: #ff5c5c; }
+.tooltip-item.fake-up { color: #ff9a9a; }
 
 .dot {
   width: 6px;

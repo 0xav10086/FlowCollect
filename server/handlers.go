@@ -85,11 +85,15 @@ func handleGetStats(c *gin.Context) {
 
 	// 2. 统计今日代理 vs 本地总量
 	var summary struct {
-		Proxy int64 `json:"proxy"`
-		Local int64 `json:"local"`
+		ProxyUp   int64 `json:"proxy_up"`
+		ProxyDown int64 `json:"proxy_down"`
+		LocalUp   int64 `json:"local_up"`
+		LocalDown int64 `json:"local_down"`
 	}
-	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("COALESCE(SUM(up_delta + down_delta), 0)").Scan(&summary.Proxy)
-	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("COALESCE(SUM(up_delta + down_delta), 0)").Scan(&summary.Local)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("COALESCE(SUM(up_delta), 0)").Scan(&summary.ProxyUp)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("COALESCE(SUM(down_delta), 0)").Scan(&summary.ProxyDown)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("COALESCE(SUM(up_delta), 0)").Scan(&summary.LocalUp)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("COALESCE(SUM(down_delta), 0)").Scan(&summary.LocalDown)
 
 	// 3. 获取最新的订阅快照
 	var subStats []SubSnapshot

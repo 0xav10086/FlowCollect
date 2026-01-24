@@ -34,25 +34,26 @@ func handleFakeGetStats(c *gin.Context) {
 	)
 
 	nodeNames := []string{"Hong Kong 01", "Japan 02", "USA 03", "Singapore 04", "Taiwan 05", "Korea 06", "Direct"}
-
 	// 临时存储节点流量值，用于后续分配给设备
-	nodeValues := make(map[string]int64)
+	nodeValues := make(map[string]struct{ up, down int64 })
 
 	var dist []gin.H
-	var totalTraffic int64 = 0 // 用于存储累加后的总流量
+	var totalUp, totalDown int64
 
 	// 2. 循环生成每个节点的流量并计算总和
 	for _, name := range nodeNames {
-		// 生成 1MB 到 2MB 之间的随机流量
-		// rand.Int63n(1MB) 会生成 0 到 1MB-1 的值，加上 1MB 后范围是 [1MB, 2MB)
-		val := rand.Int64N((MaxTraffic - MinTraffic) + MinTraffic)
+		// 生成 up/down 流量, 上行通常小于下行
+		upVal := rand.Int64N(MaxTraffic/4) + (MinTraffic / 10)
+		downVal := rand.Int64N(MaxTraffic) + MinTraffic
 
-		totalTraffic += val
-		nodeValues[name] = val
+		totalUp += upVal
+		totalDown += downVal
+		nodeValues[name] = struct{ up, down int64 }{up: upVal, down: downVal}
 
 		dist = append(dist, gin.H{
 			"name":  name,
-			"value": val,
+			"up_value":   upVal,
+			"down_value": downVal,
 		})
 	}
 
@@ -72,23 +73,26 @@ func handleFakeGetStats(c *gin.Context) {
 			deviceStartTimes[devName] = time.Now().Add(-time.Duration(rand.Int64N(7*24*3600)+3600) * time.Second)
 		}
 
-		var devCurrent int64 = 0
+		var devCurrentUp, devCurrentDown int64
 		var devNodeDetails []gin.H
 
 		// 计算该设备本次更新使用的流量（基于分配的节点）
 		for _, nodeName := range nodes {
 			if val, ok := nodeValues[nodeName]; ok {
-				devCurrent += val
+				devCurrentUp += val.up
+				devCurrentDown += val.down
 				devNodeDetails = append(devNodeDetails, gin.H{
 					"name":            nodeName,
-					"value":           val,
-					"formatted_value": formatNetworkBytes(float64(val)),
+					"up_value":        val.up,
+					"down_value":      val.down,
+					"formatted_value": formatNetworkBytes(float64(val.up + val.down)),
 				})
 			}
 		}
 
 		// 模拟总流量 (本次流量 + 随机历史基数)
-		devTotal := devCurrent + rand.Int64N(500*MB)
+		devTotalUp := devCurrentUp + rand.Int64N(200*MB)
+		devTotalDown := devCurrentDown + rand.Int64N(800*MB)
 
 		// 模拟连接数
 		activeConns := rand.IntN(50) + 5
@@ -97,10 +101,14 @@ func handleFakeGetStats(c *gin.Context) {
 
 		deviceStats = append(deviceStats, gin.H{
 			"device_name":        devName,
-			"current_traffic":    devCurrent,
-			"formatted_current":  formatNetworkBytes(float64(devCurrent)),
-			"total_traffic":      devTotal,
-			"formatted_total":    formatNetworkBytes(float64(devTotal)),
+			"current_up":         devCurrentUp,
+			"current_down":       devCurrentDown,
+			"formatted_current_up":   formatNetworkBytes(float64(devCurrentUp)),
+			"formatted_current_down": formatNetworkBytes(float64(devCurrentDown)),
+			"total_up":           devTotalUp,
+			"total_down":         devTotalDown,
+			"formatted_total_up":     formatNetworkBytes(float64(devTotalUp)),
+			"formatted_total_down":   formatNetworkBytes(float64(devTotalDown)),
 			"active_connections": activeConns,
 			"closed_connections": closedConns,
 			"total_connections":  activeConns + closedConns,
@@ -109,24 +117,19 @@ func handleFakeGetStats(c *gin.Context) {
 		})
 	}
 
-	// 4. 构建响应，确保 data 中的总流量等于 totalTraffic
+	// 4. 构建响应
 	response := gin.H{
 		"success": true,
 		"message": "数据获取成功",
-		// 关键点：这里不再单纯使用 currentStats，而是反映真实的累加值
-		"data": gin.H{
-			"total": totalTraffic, // 或者根据你 currentStats 的结构进行赋值
-			// 如果 currentStats 里还有其他字段，可以这样：
-			// "details": currentStats,
-		},
 		"system_info": gin.H{
 			"uptime":       fmt.Sprintf("%dh", rand.IntN(100)+1),
 			"load_average": []float64{rand.Float64() * 2, rand.Float64() * 2, rand.Float64() * 2},
 			"last_updated": time.Now().Format("2006-01-02 15:04:05"),
 		},
 		"historical": []gin.H{
-			{"time": time.Now().Add(-10 * time.Second).Format("15:04:05"), "value": formatNetworkBytes(float64(totalTraffic) * 0.8)}, // 模拟历史值
-			{"time": time.Now().Add(-5 * time.Second).Format("15:04:05"), "value": formatNetworkBytes(float64(totalTraffic))},
+			// The first historical point is what the line chart fetches
+			{"time": time.Now().Format("15:04:05"), "up_value": formatNetworkBytes(float64(totalUp)), "down_value": formatNetworkBytes(float64(totalDown))},
+			{"time": time.Now().Add(-5 * time.Second).Format("15:04:05"), "up_value": formatNetworkBytes(float64(totalUp) * 0.8), "down_value": formatNetworkBytes(float64(totalDown) * 0.9)},
 		},
 		"node_distribution": dist,
 		"device_stats":      deviceStats,

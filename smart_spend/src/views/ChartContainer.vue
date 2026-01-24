@@ -55,7 +55,8 @@ const circlePath = "M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.915
 
 .chart-info-wrapper h2 {
   color: var(--secondary-color, #5e6a81);
-  font-size: 12px;
+  width: 200px;
+  font-size: 18px;
   line-height: 16px;
   font-weight: 600;
   text-transform: uppercase;

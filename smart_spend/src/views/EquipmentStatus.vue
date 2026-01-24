@@ -1,7 +1,9 @@
 <template>
   <div class="chart-container applicants" ref="containerRef">
     <div class="chart-container-header">
-      <h2>Equipment Status</h2>
+      <h2 :title="isFake ? '默认是接收真实的下行数据，但是现在好像出现了一些问题，所以切换到测试数据，虽然没什么用，但至少在动:)' : 'This is demonstrating how the equipment is being used'">
+        Equipment Status{{ isFake ? '( FAKE! )' : '' }}
+      </h2>
       <span>Active Devices</span>
     </div>
     
@@ -19,7 +21,7 @@
           
           <!-- 第二行：dev.current/dev.total (activeConns) -->
           <div class="line-2">
-            <span class="traffic-main">{{ dev.current }} / {{ dev.total }}</span>
+            <span class="traffic-main" title="Download Traffic (Current/Total)">{{ dev.current }} / {{ dev.total }}</span>
             <span class="conns">({{ dev.activeConns }} active)</span>
           </div>
 
@@ -30,7 +32,11 @@
 
           <!-- 第四行：acquisitions-bar -->
           <div class="line-4 acquisitions-bar-mini">
-            <span v-for="(seg, idx) in dev.segments" :key="idx" :style="{ width: seg.width + '%', backgroundColor: seg.color }" :title="seg.name + ': ' + seg.val"></span>
+            <span
+                v-for="(seg, idx) in dev.segments"
+                :key="idx" :style="{ width: seg.width + '%', backgroundColor: seg.color }"
+                :title="seg.name + ': ' + seg.val"
+            ></span>
           </div>
         </div>
       </div>
@@ -61,6 +67,7 @@ interface DeviceStat {
 
 const containerRef = ref<HTMLElement | null>(null)
 const devices = ref<DeviceStat[]>([])
+const isFake = ref(false)
 let pollTimer: number | null = null
 
 // 简单的颜色生成与持久化
@@ -91,13 +98,46 @@ const formatUptime = (seconds: number) => {
 const fetchData = async () => {
   try {
     const token = localStorage.getItem('token')
-    const res = await fetch('/api/fake/stats', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (!res.ok) return
-    const data = await res.json()
-    const stats = data.device_stats || []
+    let stats: any[] = []
+    let fetchSuccess = false
+
+    // 1. Try Real API
+    try {
+      const res = await fetch('/api/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.device_stats) {
+          stats = data.device_stats
+          isFake.value = false
+          fetchSuccess = true
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+
+    // 2. Fallback to Fake API
+    if (!fetchSuccess) {
+      const res = await fetch('/api/fake/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      stats = data.device_stats || []
+      isFake.value = true
+    }
     
+    // 优化：在数据处理前才读取颜色，给 FlowDistribution 更多时间去生成和保存颜色
+    const storedNodeColors = localStorage.getItem('flow_node_colors')
+    if (storedNodeColors) {
+      nodeColors.value = JSON.parse(storedNodeColors)
+      console.log(`[EquipmentStatus] Loaded ${Object.keys(nodeColors.value).length} node colors from storage.`)
+    } else {
+      console.warn('[EquipmentStatus] No node colors found in storage yet.')
+    }
+
     devices.value = stats.map((d: any) => {
       // 1. 设备图标颜色
       if (!deviceColors.value[d.device_name]) {
@@ -109,20 +149,26 @@ const fetchData = async () => {
       let curProxyBytes = 0
       let curDirectBytes = 0
       const segments: any[] = []
-      const totalNodeBytes = d.node_usage.reduce((acc: number, n: any) => acc + n.value, 0)
+      // 修复：fake_api 更新后，node_usage 中不再包含 value 字段，需累加 up_value + down_value
+      const totalNodeBytes = d.node_usage.reduce((acc: number, n: any) => acc + (n.up_value + n.down_value), 0)
 
       d.node_usage.forEach((node: any) => {
-        if (node.name === 'Direct') {
-          curDirectBytes += node.value
-        } else {
-          curProxyBytes += node.value
-        }
+        // The progress bar still shows total traffic distribution for that device
+        const nodeTotal = node.up_value + node.down_value
+        if (node.name === 'Direct') curDirectBytes += node.down_value
+        else curProxyBytes += node.down_value
+
         // 构建进度条段
+        const color = nodeColors.value[node.name]
+        if (!color) {
+          console.debug(`[EquipmentStatus] Missing color for node: ${node.name}, using default gray.`)
+        }
+
         segments.push({
-          width: totalNodeBytes > 0 ? (node.value / totalNodeBytes) * 100 : 0,
-          color: nodeColors.value[node.name] || '#ccc', // 使用 storedColors
+          width: totalNodeBytes > 0 ? (nodeTotal / totalNodeBytes) * 100 : 0,
+          color: color || '#ccc', // 使用 storedColors
           name: node.name,
-          val: node.formatted_value
+          val: formatBytes(nodeTotal)
         })
       })
 
@@ -139,8 +185,8 @@ const fetchData = async () => {
         name: d.device_name,
         uptime: d.uptime,
         uptimeStr: formatUptime(d.uptime),
-        current: d.formatted_current,
-        total: d.formatted_total,
+        current: d.formatted_current_down, // Focus on download
+        total: d.formatted_total_down,   // Focus on download
         activeConns: d.active_connections,
         color: deviceColors.value[d.device_name],
         curProxy: formatBytes(curProxyBytes),
@@ -220,6 +266,7 @@ onUnmounted(() => {
   font-size: 16px;
   line-height: 20px;
   opacity: 0.8;
+  font-size: 20px;
 }
 
 .chart-container-header span {

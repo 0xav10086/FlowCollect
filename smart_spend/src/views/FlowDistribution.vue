@@ -1,10 +1,11 @@
 <template>
   <div class="chart-container" ref="containerRef">
     <div class="chart-container-header">
-      <h2>Flow Distribution</h2>
+      <h2 :title="isFake ? '默认是接收真实的下行数据，但是现在好像出现了一些问题，所以切换到测试数据，虽然没什么用，但至少在动:)' : 'This is showing how nodes are used'">
+        Flow Distribution{{ isFake ? '( FAKE! )' : '' }}
+      </h2>
       <div class="header-info">
         <span class="total-badge" v-if="historyTraffic">Now/Total: {{ currentTraffic }} / {{ historyTraffic }}</span>
-        <span class="subtitle">Fake Nodes</span>
       </div>
     </div>
     
@@ -52,6 +53,7 @@ const containerRef = ref<HTMLElement | null>(null)
 const distribution = ref<NodeDist[]>([])
 const currentTraffic = ref('')
 const historyTraffic = ref('')
+const isFake = ref(false)
 // 本地持久化状态
 const nodeColors = ref<Record<string, string>>({})
 const nodeHistory = ref<Record<string, number>>({})
@@ -93,13 +95,39 @@ const loadLocalStorage = () => {
 const fetchData = async () => {
   try {
     const token = localStorage.getItem('token')
-    const res = await fetch('/api/fake/stats', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (!res.ok) return
+    let rawDist: any[] = []
+    let fetchSuccess = false
 
-    const data = await res.json()
-    const rawDist = data.node_distribution || []
+    // 1. Try Real API
+    try {
+      const res = await fetch('/api/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.node_stats && data.node_stats.length > 0) {
+          rawDist = data.node_stats.map((item: any) => ({
+            name: item.node_name,
+            down_value: item.total // Map total to down_value for compatibility
+          }))
+          isFake.value = false
+          fetchSuccess = true
+        }
+      }
+    } catch (e) {
+      // Ignore error, fallback to fake
+    }
+
+    // 2. Fallback to Fake API
+    if (!fetchSuccess) {
+      const res = await fetch('/api/fake/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      rawDist = data.node_distribution || []
+      isFake.value = true
+    }
     
     // 调试信息输出
     const nowStr = new Date().toLocaleTimeString()
@@ -111,10 +139,10 @@ const fetchData = async () => {
     let historyTotal = 0
 
     rawDist.forEach((item: any) => {
-      currentTotal += item.value
+      currentTotal += item.down_value
       // 累加历史数据
       if (!nodeHistory.value[item.name]) nodeHistory.value[item.name] = 0
-      nodeHistory.value[item.name] += item.value
+      nodeHistory.value[item.name] += item.down_value
     })
 
     // 计算所有节点的历史总和
@@ -128,19 +156,19 @@ const fetchData = async () => {
     
     // 2. 映射数据并计算百分比
     distribution.value = rawDist.map((item: any, index: number) => {
-      const currentPct = currentTotal > 0 ? Math.round((item.value / currentTotal) * 100) : 0
+      const currentPct = currentTotal > 0 ? Math.round((item.down_value / currentTotal) * 100) : 0
       const histVal = nodeHistory.value[item.name] || 0
       const histPct = historyTotal > 0 ? Math.round((histVal / historyTotal) * 100) : 0
       
       return {
         name: item.name,
-        value: item.value,
-        formattedValue: formatBytes(item.value),
+        value: item.down_value,
+        formattedValue: formatBytes(item.down_value),
         percentage: currentPct,
         historyPercentage: histPct,
         color: getNodeColor(item.name),
         // 格式: data/data(percent/percent)
-        displayString: `${formatBytes(item.value)}/${formatBytes(histVal)} (${currentPct}%/${histPct}%)`
+        displayString: `${formatBytes(item.down_value)}/${formatBytes(histVal)} (${currentPct}%/${histPct}%)`
       }
     }).sort((a: NodeDist, b: NodeDist) => b.value - a.value) // 按流量大小排序
 
@@ -206,18 +234,14 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 16px;
   opacity: 0.8;
+  font-size: 20px;
 }
 
 .header-info {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-}
-
-.subtitle {
-  color: var(--app-logo);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 16px;
 }
 
 .total-badge {
@@ -225,6 +249,7 @@ onUnmounted(() => {
   font-size: 10px;
   font-weight: 600;
   opacity: 0.7;
+  font-size: 16px;
 }
 
 .acquisitions-bar {
