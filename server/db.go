@@ -20,6 +20,7 @@ type TrafficRecord struct {
 	UpDelta   int64
 	DownDelta int64
 	IsProxy   bool
+	ActiveConns int
 }
 
 type SubSnapshot struct {

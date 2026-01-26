@@ -108,10 +108,77 @@ func handleGetStats(c *gin.Context) {
 		}
 	}
 
+	// 4. 统计设备信息 (新增，模仿 fake_api.go)
+	var deviceStats []gin.H
+	var deviceIDs []string
+	db.Model(&TrafficRecord{}).Distinct("device_id").Pluck("device_id", &deviceIDs)
+
+	// a. 预查询，避免N+1
+	type DeviceTraffic struct {
+		DeviceID string
+		Up       int64
+		Down     int64
+	}
+	var todayTraffics, totalTraffics []DeviceTraffic
+	db.Model(&TrafficRecord{}).Select("device_id, SUM(up_delta) as up, SUM(down_delta) as down").Where("timestamp >= ?", today).Group("device_id").Scan(&todayTraffics)
+	db.Model(&TrafficRecord{}).Select("device_id, SUM(up_delta) as up, SUM(down_delta) as down").Group("device_id").Scan(&totalTraffics)
+
+	type DeviceNodeUsage struct {
+		DeviceID, NodeName string
+		Up, Down           int64
+	}
+	var nodeUsages []DeviceNodeUsage
+	db.Model(&TrafficRecord{}).Select("device_id, node_name, SUM(up_delta) as up, SUM(down_delta) as down").Where("timestamp >= ?", today).Group("device_id, node_name").Scan(&nodeUsages)
+
+	type DeviceFirstSeen struct {
+		DeviceID  string
+		FirstSeen time.Time
+	}
+	var firstSeens []DeviceFirstSeen
+	db.Model(&TrafficRecord{}).Select("device_id, MIN(timestamp) as first_seen").Group("device_id").Scan(&firstSeens)
+
+	// b. 数据整理到Map
+	todayTrafficMap := make(map[string]DeviceTraffic)
+	for _, t := range todayTraffics {
+		todayTrafficMap[t.DeviceID] = t
+	}
+	totalTrafficMap := make(map[string]DeviceTraffic)
+	for _, t := range totalTraffics {
+		totalTrafficMap[t.DeviceID] = t
+	}
+	nodeUsageMap := make(map[string][]DeviceNodeUsage)
+	for _, u := range nodeUsages {
+		nodeUsageMap[u.DeviceID] = append(nodeUsageMap[u.DeviceID], u)
+	}
+	firstSeenMap := make(map[string]time.Time)
+	for _, s := range firstSeens {
+		firstSeenMap[s.DeviceID] = s.FirstSeen
+	}
+
+	// c. 组装最终数据
+	for _, devID := range deviceIDs {
+		devToday := todayTrafficMap[devID]
+		devTotal := totalTrafficMap[devID]
+		devNodes := nodeUsageMap[devID]
+		var devNodeDetails []gin.H
+		for _, nu := range devNodes {
+			devNodeDetails = append(devNodeDetails, gin.H{"name": nu.NodeName, "up_value": nu.Up, "down_value": nu.Down, "formatted_value": formatNetworkBytes(float64(nu.Up + nu.Down))})
+		}
+
+		deviceStats = append(deviceStats, gin.H{
+			"device_name": devID, "uptime": int64(time.Since(firstSeenMap[devID]).Seconds()),
+			"current_up": devToday.Up, "current_down": devToday.Down, "formatted_current_up": formatNetworkBytes(float64(devToday.Up)), "formatted_current_down": formatNetworkBytes(float64(devToday.Down)),
+			"total_up": devTotal.Up, "total_down": devTotal.Down, "formatted_total_up": formatNetworkBytes(float64(devTotal.Up)), "formatted_total_down": formatNetworkBytes(float64(devTotal.Down)),
+			"active_connections": 0, "closed_connections": 0, "total_connections": 0, // 真实数据中无连接数统计
+			"node_usage": devNodeDetails,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"date":       today.Format("2006-01-02"),
 		"summary":    summary,
 		"node_stats": nodeStats,
 		"sub_stats":  subStats,
+		"device_stats": deviceStats,
 	})
 }

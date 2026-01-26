@@ -126,6 +126,7 @@ type ReportData struct {
 	UpDelta   int64  `json:"up_delta"`
 	DownDelta int64  `json:"down_delta"`
 	IsProxy   bool   `json:"is_proxy"`
+	ActiveConns int    `json:"active_connections"` // 新增：活跃连接数
 }
 
 type NodeStats struct {
@@ -179,8 +180,9 @@ func fetchAndProcess(silent bool) {
 	}
 
 	// 打印活跃连接数
+	activeConns := len(data.Connections)
 	if !silent {
-		fmt.Printf("[%s] 活跃连接数: %d\n", time.Now().Format("15:04:05"), len(data.Connections))
+		fmt.Printf("[%s] 活跃连接数: %d\n", time.Now().Format("15:04:05"), activeConns)
 	}
 
 	nodeStatsMap := make(map[string]*NodeStats)
@@ -218,13 +220,13 @@ func fetchAndProcess(silent bool) {
 	if !silent {
 		for name, stats := range nodeStatsMap {
 			if stats.Up > 0 || stats.Down > 0 {
-				dispatch(name, stats.Up, stats.Down, currConf)
+				dispatch(name, stats.Up, stats.Down, activeConns, currConf)
 			}
 		}
 	}
 }
 
-func dispatch(nodeName string, up, down int64, currConf Config) {
+func dispatch(nodeName string, up, down int64, activeConns int, currConf Config) {
 	lowerName := strings.ToLower(nodeName)
 	isProxy := (lowerName != "direct" && lowerName != "ua3f")
 
@@ -235,6 +237,7 @@ func dispatch(nodeName string, up, down int64, currConf Config) {
 		UpDelta:   up,
 		DownDelta: down,
 		IsProxy:   isProxy,
+		ActiveConns: activeConns,
 	}
 
 	saveLocal(payload, currConf.LocalLogFile)

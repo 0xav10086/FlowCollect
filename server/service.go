@@ -189,6 +189,23 @@ func sendEmail(subject, body string) {
 		return
 	}
 	auth := smtp.PlainAuth("", conf.EmailUser, conf.EmailPass, conf.SMTPHost)
-	msg := []byte("To: " + conf.EmailTo + "\r\nSubject: " + subject + "\r\n\r\n" + body)
-	smtp.SendMail(conf.SMTPHost+":"+conf.SMTPPort, auth, conf.EmailUser, []string{conf.EmailTo}, msg)
+
+	// 构造符合 MIME 标准的邮件头
+	// 注意：QQ 邮箱要求 From 必须与认证用户一致
+	header := make(map[string]string)
+	header["From"] = conf.EmailUser
+	header["To"] = conf.EmailTo
+	header["Subject"] = subject
+	header["Content-Type"] = "text/plain; charset=UTF-8"
+
+	message := ""
+	for k, v := range header {
+		message += fmt.Sprintf("%s: %s\r\n", k, v)
+	}
+	message += "\r\n" + body
+
+	err := smtp.SendMail(conf.SMTPHost+":"+conf.SMTPPort, auth, conf.EmailUser, []string{conf.EmailTo}, []byte(message))
+	if err != nil {
+		log.Printf("❌ 邮件发送失败: %v", err)
+	}
 }
