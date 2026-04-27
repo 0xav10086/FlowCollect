@@ -1,46 +1,98 @@
-# .gitignore for FlowCollect
+# ========== FlowCollect 专用 ==========
 
-# 编译输出目录
-dist/
+# Node.js / 前端依赖
+smart_spend/node_modules/
+smart_spend/dist/
+smart_spend/.vite/
+node_modules/
+
+# Go 编译产物（server/client 目录）
 *.exe
 *.exe~
-
-# Go 编译文件
 *.test
 *.out
 *.prof
 *.so
 *.dll
+*.o
+*.a
+
+# Go workspace 文件（可选，看是否需要共享）
+# go.work
+# go.work.sum
+
+# 数据库文件（如果不需要版本控制）
+*.db
+*.sqlite
+*.sqlite3
+
+# 配置文件（包含敏感信息）
+*.ini
+*.ini.local
+setting.ini
+
+# 统计数据文件（运行时会重新生成）
+*_traffic_stats.json
+node_traffic_stats.json
+
+# 备份文件
+*.bak
+*.tmp
+
+# ========== 通用 ==========
 
 # 依赖目录
 vendor/
+packages/
 
-# IDE 文件
+# 编译输出
+/bin/
+/obj/
+/out/
+/dist/
+/build/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.sublime-*
 
-# 操作系统文件
+# 操作系统
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# 环境文件
-.env
-.env.local
-
-# 二进制文件
-/bin/
-/out/
-
-# 临时文件
-temp/
-tmp/
-
-# 日志文件
+# 日志
 *.log
 logs/
+*.pid
+*.seed
 
-# 配置文件
-*.ini
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 测试覆盖率
+*.cover
+*.codecov
+coverage/
+.nyc_output/
+
+# 调试文件
+*.dSYM/
+*.pdb
