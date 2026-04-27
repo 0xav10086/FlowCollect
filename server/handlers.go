@@ -21,12 +21,13 @@ func handleReport(c *gin.Context) {
 	}
 
 	var data struct {
-		Timestamp int64  `json:"timestamp"`
-		DeviceID  string `json:"device_id"`
-		NodeName  string `json:"node_name"`
-		UpDelta   int64  `json:"up_delta"`
-		DownDelta int64  `json:"down_delta"`
-		IsProxy   bool   `json:"is_proxy"`
+		Timestamp   int64  `json:"timestamp"`
+		DeviceID    string `json:"device_id"`
+		NodeName    string `json:"node_name"`
+		UpDelta     int64  `json:"up_delta"`
+		DownDelta   int64  `json:"down_delta"`
+		IsProxy     bool   `json:"is_proxy"`
+		ActiveConns int    `json:"active_connections"`
 	}
 
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -35,12 +36,13 @@ func handleReport(c *gin.Context) {
 	}
 
 	db.Create(&TrafficRecord{
-		Timestamp: time.Unix(data.Timestamp, 0),
-		DeviceID:  data.DeviceID,
-		NodeName:  data.NodeName,
-		UpDelta:   data.UpDelta,
-		DownDelta: data.DownDelta,
-		IsProxy:   data.IsProxy,
+		Timestamp:   time.Unix(data.Timestamp, 0),
+		DeviceID:    data.DeviceID,
+		NodeName:    data.NodeName,
+		UpDelta:     data.UpDelta,
+		DownDelta:   data.DownDelta,
+		IsProxy:     data.IsProxy,
+		ActiveConns: data.ActiveConns,
 	})
 	c.Status(http.StatusOK)
 }
@@ -137,6 +139,16 @@ func handleGetStats(c *gin.Context) {
 	var firstSeens []DeviceFirstSeen
 	db.Model(&TrafficRecord{}).Select("device_id, MIN(timestamp) as first_seen").Group("device_id").Scan(&firstSeens)
 
+	// 查询每个设备今日最新一条记录的活跃连接数
+	activeConnsMap := make(map[string]int)
+	for _, devID := range deviceIDs {
+		var latest TrafficRecord
+		if err := db.Where("device_id = ? AND timestamp >= ?", devID, today).
+			Order("timestamp DESC, id DESC").First(&latest).Error; err == nil {
+			activeConnsMap[devID] = latest.ActiveConns
+		}
+	}
+
 	// b. 数据整理到Map
 	todayTrafficMap := make(map[string]DeviceTraffic)
 	for _, t := range todayTraffics {
@@ -169,7 +181,7 @@ func handleGetStats(c *gin.Context) {
 			"device_name": devID, "uptime": int64(time.Since(firstSeenMap[devID]).Seconds()),
 			"current_up": devToday.Up, "current_down": devToday.Down, "formatted_current_up": formatNetworkBytes(float64(devToday.Up)), "formatted_current_down": formatNetworkBytes(float64(devToday.Down)),
 			"total_up": devTotal.Up, "total_down": devTotal.Down, "formatted_total_up": formatNetworkBytes(float64(devTotal.Up)), "formatted_total_down": formatNetworkBytes(float64(devTotal.Down)),
-			"active_connections": 0, "closed_connections": 0, "total_connections": 0, // 真实数据中无连接数统计
+			"active_connections": activeConnsMap[devID], "closed_connections": 0, "total_connections": activeConnsMap[devID],
 			"node_usage": devNodeDetails,
 		})
 	}
