@@ -30,6 +30,8 @@ node_modules/
 *.ini
 *.ini.local
 setting.ini
+server/*.ini
+client/*.ini
 
 # 统计数据文件（运行时会重新生成）
 *_traffic_stats.json
