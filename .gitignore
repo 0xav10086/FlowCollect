@@ -77,6 +77,7 @@ Desktop.ini
 logs/
 *.pid
 *.seed
+node_traffic_stats.json
 
 # 环境变量
 .env
