@@ -4,17 +4,19 @@
 package main
 
 import (
-	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gorilla/websocket"
 	"gopkg.in/ini.v1"
 )
 
@@ -29,16 +31,30 @@ type Config struct {
 }
 
 var (
-	conf      Config
-	confLock  sync.RWMutex
-	lastStats = make(map[string]Conn)
-	iniPath   = "ClientSetting.ini"
+	conf       Config
+	confLock   sync.RWMutex
+	lastStats  = make(map[string]Conn)
+	iniPath    = "ClientSetting.ini"
+	reportChan = make(chan ReportData, 100)
 )
 
 func init() {
+	// 智能定位配置文件：如果当前目录找不到，尝试在可执行文件所在目录查找
+	if _, err := os.Stat(iniPath); os.IsNotExist(err) {
+		if exe, err := os.Executable(); err == nil {
+			exeDir := filepath.Dir(exe)
+			altPath := filepath.Join(exeDir, "ClientSetting.ini")
+			if _, err := os.Stat(altPath); err == nil {
+				iniPath = altPath
+				fmt.Printf("当前目录未找到配置，已切换至可执行文件目录: %s\n", iniPath)
+			}
+		}
+	}
+
 	// 程序启动时首次加载
 	if err := loadConfig(); err != nil {
 		fmt.Printf("初始加载配置文件失败: %v，将使用代码内置默认值\n", err)
+		applyDefaults()
 	}
 	// 启动后台监控协程
 	go watchConfig()
@@ -56,7 +72,7 @@ func loadConfig() error {
 
 	section := cfg.Section("")
 	conf = Config{
-		MihomoAPIAddr: section.Key("MihomoAPIAddr").MustString("http://127.0.0.1:9097"),
+		MihomoAPIAddr: section.Key("MihomoAPIAddr").MustString("http://127.0.0.1:9090"),
 		MihomoSecret:  section.Key("MihomoSecret").MustString(""),
 		RemoteServer:  section.Key("RemoteServer").MustString(""),
 		RemoteToken:   section.Key("RemoteToken").MustString("YourSecretToken"),
@@ -66,6 +82,20 @@ func loadConfig() error {
 
 	fmt.Printf("[%s] 配置文件加载/更新成功\n", time.Now().Format("15:04:05"))
 	return nil
+}
+
+func applyDefaults() {
+	confLock.Lock()
+	defer confLock.Unlock()
+
+	conf = Config{
+		MihomoAPIAddr: "http://127.0.0.1:9090",
+		MihomoSecret:  "abcd",
+		RemoteServer:  "",
+		RemoteToken:   "YourSecretToken",
+		DeviceID:      "Device-Default",
+		LocalLogFile:  "node_traffic_stats.json",
+	}
 }
 
 // 监控文件变化的协程
@@ -120,12 +150,12 @@ type Conn struct {
 }
 
 type ReportData struct {
-	Timestamp int64  `json:"timestamp"`
-	DeviceID  string `json:"device_id"`
-	NodeName  string `json:"node_name"`
-	UpDelta   int64  `json:"up_delta"`
-	DownDelta int64  `json:"down_delta"`
-	IsProxy   bool   `json:"is_proxy"`
+	Timestamp   int64  `json:"timestamp"`
+	DeviceID    string `json:"device_id"`
+	NodeName    string `json:"node_name"`
+	UpDelta     int64  `json:"up_delta"`
+	DownDelta   int64  `json:"down_delta"`
+	IsProxy     bool   `json:"is_proxy"`
 	ActiveConns int    `json:"active_connections"` // 新增：活跃连接数
 }
 
@@ -138,6 +168,9 @@ func main() {
 	confLock.RLock()
 	fmt.Printf("精细化监控启动 [%s]...\n", conf.DeviceID)
 	confLock.RUnlock()
+
+	// 启动 WebSocket 管理器负责异步上报
+	go websocketManager()
 
 	fmt.Println("正在初始化连接快照 (静默模式)...")
 	fetchAndProcess(true)
@@ -231,17 +264,24 @@ func dispatch(nodeName string, up, down int64, activeConns int, currConf Config)
 	isProxy := (lowerName != "direct" && lowerName != "ua3f")
 
 	payload := ReportData{
-		Timestamp: time.Now().Unix(),
-		DeviceID:  currConf.DeviceID,
-		NodeName:  nodeName,
-		UpDelta:   up,
-		DownDelta: down,
-		IsProxy:   isProxy,
+		Timestamp:   time.Now().Unix(),
+		DeviceID:    currConf.DeviceID,
+		NodeName:    nodeName,
+		UpDelta:     up,
+		DownDelta:   down,
+		IsProxy:     isProxy,
 		ActiveConns: activeConns,
 	}
 
 	saveLocal(payload, currConf.LocalLogFile)
-	sendRemote(payload, currConf)
+
+	select {
+	case reportChan <- payload:
+		// 成功放入 channel
+	default:
+		// channel 满了，丢弃新数据，避免阻塞 fetchAndProcess
+		fmt.Printf("[%s] ⚠️ 发送缓冲已满，丢弃数据 (Node: %s)\n", time.Now().Format("15:04:05"), nodeName)
+	}
 }
 
 func saveLocal(data ReportData, filename string) {
@@ -254,31 +294,67 @@ func saveLocal(data ReportData, filename string) {
 	f.WriteString(string(b) + "\n")
 }
 
-func sendRemote(data ReportData, currConf Config) {
-	body, _ := json.Marshal(data)
-	req, _ := http.NewRequest("POST", currConf.RemoteServer, bytes.NewBuffer(body))
-	req.Header.Set("Authorization", "Bearer "+currConf.RemoteToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr, Timeout: 5 * time.Second}
-
-	resp, err := client.Do(req)
-
+func getWSURL(serverURL string) string {
+	u, err := url.Parse(serverURL)
 	if err != nil {
-		fmt.Printf("[上报失败] 网络错误: %v\n", err)
-		return
+		return strings.Replace(serverURL, "http", "ws", 1)
 	}
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[上报失败] 服务器返回错误码: %d (请检查 Token 是否匹配)\n", resp.StatusCode)
-		return
+	if u.Scheme == "https" {
+		u.Scheme = "wss"
+	} else if u.Scheme == "http" {
+		u.Scheme = "ws"
 	}
-	defer resp.Body.Close()
+	// 将旧的 http://ip:port/report 转换为 ws://ip:port/ws
+	if strings.HasSuffix(u.Path, "/report") {
+		u.Path = strings.TrimSuffix(u.Path, "/report") + "/ws"
+	}
+	return u.String()
+}
 
-	fmt.Printf("[已上报] %s | 节点: %-15s ↑%-10s ↓%-10s\n",
-		time.Now().Format("15:04:05"), data.NodeName, formatBytes(data.UpDelta), formatBytes(data.DownDelta))
+func websocketManager() {
+	var wsConn *websocket.Conn
+	var err error
+
+	for {
+		confLock.RLock()
+		currConf := conf
+		confLock.RUnlock()
+
+		if currConf.RemoteServer == "" {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		wsURL := getWSURL(currConf.RemoteServer)
+
+		headers := http.Header{}
+		headers.Set("Authorization", "Bearer "+currConf.RemoteToken)
+		dialer := websocket.DefaultDialer
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+		fmt.Printf("[WebSocket] 正在连接到 %s...\n", wsURL)
+		wsConn, _, err = dialer.Dial(wsURL, headers)
+		if err != nil {
+			fmt.Printf("[WebSocket] 连接失败: %v。5秒后重试...\n", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		fmt.Println("[WebSocket] ✅ 连接成功，准备发送数据。")
+
+		// 循环从 channel 读取并发送数据
+		for data := range reportChan {
+			err = wsConn.WriteJSON(data)
+			if err != nil {
+				fmt.Printf("[WebSocket] ❌ 发送错误: %v。断开并重新连接...\n", err)
+				wsConn.Close()
+				break // 跳出内层循环，重新连接
+			} else {
+				fmt.Printf("[已上报 WS] %s | 节点: %-15s ↑%-10s ↓%-10s\n",
+					time.Now().Format("15:04:05"), data.NodeName, formatBytes(data.UpDelta), formatBytes(data.DownDelta))
+			}
+		}
+	}
 }
 
 func formatBytes(b int64) string {
