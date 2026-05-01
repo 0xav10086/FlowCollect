@@ -1,6 +1,6 @@
 <template>
   <div class="main-header-line">
-    <h1>FlowCollect Dashboard</h1>
+    <h1 @click="copySubscription" title="点击复制订阅配置链接" style="cursor: pointer;">FlowCollect Dashboard</h1>
     <div class="action-buttons">
       <button class="action-btn" @click="goToGithub" title="GitHub">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-github"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const isDark = useDark()
@@ -31,6 +32,20 @@ const handleLogout = () => {
 
 const goToGithub = () => {
   window.open('https://github.com/0xav10086/FlowCollect', '_blank')
+}
+
+const copySubscription = async () => {
+  // 生成示例的订阅下发链接
+  const subUrl = `${window.location.origin}/config.yaml`
+  try {
+    await navigator.clipboard.writeText(subUrl)
+    ElMessage.success({
+      message: '配置文件订阅链接已复制到剪贴板！',
+      duration: 3000
+    })
+  } catch (err) {
+    ElMessage.error('复制失败，请手动复制或检查浏览器权限。')
+  }
 }
 </script>
 
@@ -47,6 +62,11 @@ const goToGithub = () => {
   margin: 0;
   font-size: 24px;
   line-height: 32px;
+  transition: opacity 0.2s;
+}
+
+.main-header-line h1:hover {
+  opacity: 0.8;
 }
 
 .action-buttons {
