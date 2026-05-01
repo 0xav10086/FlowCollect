@@ -1,0 +1,145 @@
+payload:
+  # ==========================================
+  # [MANUAL_START] Private
+  # ==========================================
+  # ==========================================
+  # [MANUAL_END] Private
+
+  # === [AUTO: Telegram] ===
+  - DOMAIN,api.imem.app
+  - DOMAIN,api.swiftgram.app
+  - DOMAIN-SUFFIX,cdn-telegram.org
+  - DOMAIN-SUFFIX,comments.app
+  - DOMAIN-SUFFIX,contest.com
+  - DOMAIN-SUFFIX,graph.org
+  - DOMAIN-SUFFIX,legra.ph
+  - DOMAIN-SUFFIX,mbrx.app
+  - DOMAIN-SUFFIX,quiz.directory
+  - DOMAIN-SUFFIX,stel.com
+  - DOMAIN-SUFFIX,t.me
+  - DOMAIN-SUFFIX,tdesktop.com
+  - DOMAIN-SUFFIX,telega.one
+  - DOMAIN-SUFFIX,telegra.ph
+  - DOMAIN-SUFFIX,telegram-cdn.org
+  - DOMAIN-SUFFIX,telegram.dog
+  - DOMAIN-SUFFIX,telegram.me
+  - DOMAIN-SUFFIX,telegram.org
+  - DOMAIN-SUFFIX,telegram.space
+  - DOMAIN-SUFFIX,telegramdownload.com
+  - DOMAIN-SUFFIX,telesco.pe
+  - DOMAIN-SUFFIX,tg.dev
+  - DOMAIN-SUFFIX,tx.me
+  - DOMAIN-SUFFIX,usercontent.dev
+  - DOMAIN-KEYWORD,nicegram
+  - IP-CIDR,109.239.140.0/24
+  - IP-CIDR,139.59.210.98/32
+  - IP-CIDR,149.154.160.0/20
+  - IP-CIDR,196.55.216.167/32
+  - IP-CIDR,5.28.192.0/18
+  - IP-CIDR,91.108.0.0/16
+  - IP-CIDR6,2001:67c:4e8::/48
+  - IP-CIDR6,2001:b28:f23c::/47
+  - IP-CIDR6,2001:b28:f23f::/48
+  - IP-CIDR6,2a0a:f280::/29
+  - PROCESS-NAME,Telegram.exe
+  - PROCESS-NAME,nekox.messenger
+  - PROCESS-NAME,org.telegram.messenger
+  - PROCESS-NAME,telegram-desktop
+  - PROCESS-NAME,tw.nekomimi.nekogram
+  - PROCESS-NAME,xyz.nextalone.nagram
+  - IP-ASN,211157
+  - IP-ASN,44907
+  - IP-ASN,59930
+  - IP-ASN,62014
+  - IP-ASN,62041
+  # =====================
+
+  # === [AUTO: Youtube] ===
+  - DOMAIN-SUFFIX,  # === 核心视频流与交互 (最核心，流量大头) ===
+  - DOMAIN-SUFFIX,googlevideo.com            # 视频数据分发 (最关键)
+  - DOMAIN-SUFFIX,youtube.com                # 主站域名 (已包含 www, m 等所有子域名)
+  - DOMAIN-SUFFIX,ytimg.com                  # 静态资源、缩略图、头像
+  - DOMAIN-SUFFIX,ggpht.com                  # Google 托管图片 (YouTube 常用)
+  - DOMAIN-SUFFIX,youtubei.googleapis.com    # 客户端内部 API (App 使用)
+  - DOMAIN-SUFFIX,yt.be                      # 官方短链
+  - DOMAIN-SUFFIX,youtu.be                   # 官方短链
+  - DOMAIN-SUFFIX,youtube-nocookie.com       # 无 Cookie 嵌入版
+  - DOMAIN-SUFFIX,  # === 功能与附属服务 ===
+  - DOMAIN-SUFFIX,youtubegaming.com          # 游戏版
+  - DOMAIN-SUFFIX,youtubekids.com            # 儿童版
+  - DOMAIN-SUFFIX,youtubeeducation.com       # 教育版
+  - DOMAIN-SUFFIX,youtubefanfest.com         # 粉丝节
+  - DOMAIN-SUFFIX,youtubemobilesupport.com   # 移动端支持
+  - DOMAIN-SUFFIX,oauthaccountmanager.googleapis.com # 登录验证相关
+  - DOMAIN-SUFFIX,  # === 针对 YouTube TV 与流媒体扩展 ===
+  - DOMAIN-SUFFIX,youtube-tv.com
+  - DOMAIN-SUFFIX,googletv.com
+  - DOMAIN-SUFFIX,  # === 针对统计信息与底层 API ===
+  - DOMAIN-SUFFIX,jnn-pa.googleapis.com
+  - DOMAIN-SUFFIX,video-stats.l.google.com
+  - DOMAIN-SUFFIX,youtube.googleapis.com
+  - DOMAIN-SUFFIX,yt3.googleapis.com
+  - DOMAIN-SUFFIX,  # === 针对网页 UI 与重定向 ===
+  - DOMAIN-SUFFIX,youtube-ui.l.google.com
+  - DOMAIN-SUFFIX,redirector.googlevideo.com # 负载均衡重定向 (已包含在核心段则可忽略)
+  - DOMAIN-SUFFIX,  # === 全球地区分站 (保留你要求的全球化列表) ===
+  - DOMAIN-SUFFIX,  # 注意：Clash 的 +.youtube.com 已自动匹配 .com.hk .com.tw 等后缀
+  - DOMAIN-SUFFIX,  # 但为了极致兼容性，保留以下特定的非 .com 后缀
+  - DOMAIN-SUFFIX,youtube.ae
+  - DOMAIN-SUFFIX,youtube.at
+  - DOMAIN-SUFFIX,youtube.be
+  - DOMAIN-SUFFIX,youtube.bg
+  - DOMAIN-SUFFIX,youtube.ca
+  - DOMAIN-SUFFIX,youtube.ch
+  - DOMAIN-SUFFIX,youtube.cl
+  - DOMAIN-SUFFIX,youtube.de
+  - DOMAIN-SUFFIX,youtube.dk
+  - DOMAIN-SUFFIX,youtube.es
+  - DOMAIN-SUFFIX,youtube.fi
+  - DOMAIN-SUFFIX,youtube.fr
+  - DOMAIN-SUFFIX,youtube.hk
+  - DOMAIN-SUFFIX,youtube.ie
+  - DOMAIN-SUFFIX,youtube.in
+  - DOMAIN-SUFFIX,youtube.it
+  - DOMAIN-SUFFIX,youtube.jp
+  - DOMAIN-SUFFIX,youtube.kr
+  - DOMAIN-SUFFIX,youtube.mx
+  - DOMAIN-SUFFIX,youtube.my
+  - DOMAIN-SUFFIX,youtube.nl
+  - DOMAIN-SUFFIX,youtube.no
+  - DOMAIN-SUFFIX,youtube.pl
+  - DOMAIN-SUFFIX,youtube.pt
+  - DOMAIN-SUFFIX,youtube.ro
+  - DOMAIN-SUFFIX,youtube.ru
+  - DOMAIN-SUFFIX,youtube.se
+  - DOMAIN-SUFFIX,youtube.sg
+  - DOMAIN-SUFFIX,youtube.tv
+  - DOMAIN-SUFFIX,youtube.uk
+  - DOMAIN-SUFFIX,youtube.vn
+  # =====================
+
+  # === [AUTO: Twitch] ===
+  - DOMAIN-SUFFIX,ext-twitch.tv
+  - DOMAIN-SUFFIX,jtvnw.net
+  - DOMAIN-SUFFIX,live-video.net
+  - DOMAIN-SUFFIX,ttvnw.net
+  - DOMAIN-SUFFIX,twitch-ext.rootonline.de
+  - DOMAIN-SUFFIX,twitch.tv
+  - DOMAIN-SUFFIX,twitchcdn.net
+  - DOMAIN-SUFFIX,twitchsvc.net
+  - DOMAIN-KEYWORD,ttvnw
+  - IP-CIDR,103.53.48.0/23
+  - IP-CIDR,185.42.204.0/22
+  - IP-CIDR,192.108.239.0/24
+  - IP-CIDR,192.16.64.0/21
+  - IP-CIDR,199.9.248.0/21
+  - IP-CIDR,23.160.0.0/24
+  - IP-CIDR,45.113.128.0/22
+  - IP-CIDR,52.223.192.0/20
+  - IP-CIDR,52.223.208.0/21
+  - IP-CIDR,52.223.224.0/19
+  - IP-CIDR,99.181.64.0/18
+  - IP-CIDR6,2402:2a80::/32
+  - PROCESS-NAME,tv.twitch.android.app
+  # =====================
+

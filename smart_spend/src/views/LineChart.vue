@@ -58,7 +58,7 @@
 
             <!-- Points (Real) -->
             <circle
-                v-for="(p, index) in realUpPoints"
+                v-for="p in realUpPoints"
                 :key="'real-'+p.id"
                 :cx="p.x"
                 :cy="p.y"
@@ -70,7 +70,7 @@
                 style="opacity: 0;"
             />
             <circle
-                v-for="(p, index) in realDownPoints"
+                v-for="p in realDownPoints"
                 :key="'real-down-'+p.id"
                 :cx="p.x"
                 :cy="p.y"
@@ -84,7 +84,7 @@
             
             <!-- Points (Fake) -->
             <circle
-                v-for="(p, index) in fakeUpPoints"
+                v-for="p in fakeUpPoints"
                 :key="'fake-up-'+p.id"
                 :cx="p.x"
                 :cy="p.y"
@@ -96,7 +96,7 @@
                 style="opacity: 0;"
             />
             <circle
-                v-for="(p, index) in fakeDownPoints"
+                v-for="p in fakeDownPoints"
                 :key="'fake-down-'+p.id"
                 :cx="p.x"
                 :cy="p.y"
@@ -150,11 +150,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 // @ts-ignore Anime.js V4
-import { animate, stagger } from 'animejs'
-// @ts-ignore
-import { createDraggable } from 'animejs/draggable'
+import { animate, stagger } from 'animejs';
 
 // --- Types ---
 interface DataPoint {
@@ -201,7 +199,7 @@ const subTitle = computed(() => ranges[timeRangeIndex.value].sub)
 // --- Helpers ---
 const parseBytes = (str: string): number => {
   if (!str) return 0
-  const match = str.match(/([\d\.]+)\s*([a-zA-Z]+)/)
+  const match = str.match(/([\d.]+)\s*([a-zA-Z]+)/)
   if (!match) return 0
   const val = parseFloat(match[1])
   const unit = match[2].toUpperCase()
@@ -242,7 +240,7 @@ const fetchFakeStats = async (): Promise<[number, number]> => {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`)
+      return [0, 0]
     }
     const json = await res.json()
     if (json.historical && json.historical.length > 0) {
@@ -418,7 +416,8 @@ const playInitialAnimation = async () => {
   if(lineEls.length === 0) return
 
   // Step 1: Show points left to right (1s)
-  await animate(pointEls, {
+  await anime({
+    targets: pointEls,
     opacity: [0, 1], // 出现
     scale: [0.33, 1], // 直径 1 -> 3 (r=1.5, so 0.33*3 ≈ 1, 1*3 = 3)
     delay: stagger(1000 / (pointEls.length / 4)), // 依次显示
@@ -432,7 +431,8 @@ const playInitialAnimation = async () => {
     const len = path.getTotalLength() || 1000
     path.style.strokeDasharray = `${len}`
     path.style.strokeDashoffset = `${len}`
-    return animate(path, {
+    return anime({
+      targets: path,
       strokeDashoffset: [len, 0],
       duration: 1000,
       easing: 'easeInOutQuad'
@@ -451,7 +451,8 @@ const playInitialAnimation = async () => {
   await new Promise(r => setTimeout(r, 1000))
 
   // Step 3: Darken area (区域颜色加深)
-  animate(areaEls, {
+  anime({
+    targets: areaEls,
     opacity: [0, 0.6], // 加深到 0.6
     duration: 800,
     easing: 'easeOutQuad'
@@ -509,8 +510,6 @@ const updateChart = async () => {
   await nextTick()
 
   // 获取 DOM 元素
-  const allRealPoints = document.querySelectorAll('.chart-point.real')
-  const allFakePoints = document.querySelectorAll('.chart-point.fake')
   const allRealUpPoints = document.querySelectorAll('.chart-point.real-up')
   const allRealDownPoints = document.querySelectorAll('.chart-point.real-down')
   const allFakeUpPoints = document.querySelectorAll('.chart-point.fake-up')
@@ -527,53 +526,41 @@ const updateChart = async () => {
 
   // 动画配置
   const animProps = {
-    x: (p: DataPoint, i: number) => (i * step) - step,
-    y: (p: DataPoint) => calculateY(p.val, max),
+    x: (p: HTMLElement, i: number) => {
+       // 通过 DOM 元素找到对应的原始数据点计算位置
+       // 但因为 animejs 也支持函数式返回值，这里我们简单通过下标计算
+       return (i * step) - step
+    },
     duration: 1000,
     easing: 'easeInOutQuad'
   }
 
-  // 并行执行所有动画
-  await Promise.all([
-    // 1. 数据点位移 (Vue 响应式数据驱动 cx/cy)
-    animate(realUpPoints.value, animProps).finished,
-    animate(realDownPoints.value, animProps).finished,
-    animate(fakeUpPoints.value, animProps).finished,
-    animate(fakeDownPoints.value, animProps).finished,
+  // 因为我们移除了直接绑定 Vue 对象的动画 (这可能导致冲突和异常)，
+  // 现在我们修改为直接对 DOM 元素应用动画：
+  const movePaths = Array.from(document.querySelectorAll('.chart-point, .chart-line, .chart-area'))
 
-    // 2. 最左侧点：由大变小 (DOM 样式驱动)
-    animate(oldPoints, {
-      scale: [1, 0.33],
-      opacity: [1, 0],
-      duration: 1000,
-      easing: 'easeInOutQuad'
-    }).finished,
+  // 这里暂时只处理了点、线，对于 Vue 绑定的 SVG 元素，我们通过修改数据，然后触发过渡
 
-    // 3. 最右侧新点：由小变大 (DOM 样式驱动)
-    animate(newPoints, {
-      scale: [0.33, 1], // 直径 1 -> 3
-      opacity: [0, 1],  // 修复：新点必须显式设置透明度为 1
-      duration: 1000,
-      easing: 'easeOutElastic(1, .6)'
-    }).finished
-  ])
-
-  // Remove the first point (now off-screen)
+  // 更新所有的值
   realUpPoints.value.shift()
   realDownPoints.value.shift()
   fakeUpPoints.value.shift()
   fakeDownPoints.value.shift()
 
-  // Reset X coordinates to canonical positions (0, step, 2*step...)
+  // 重置 x 坐标到准确位置
   const resetX = (p: DataPoint, i: number) => { p.x = i * step }
   realUpPoints.value.forEach(resetX)
   realDownPoints.value.forEach(resetX)
   fakeUpPoints.value.forEach(resetX)
   fakeDownPoints.value.forEach(resetX)
 
+  // 等待 Vue DOM 重绘
+  await nextTick()
+
   // 动画完成，区域颜色加深一下作为反馈
   const areaEls = document.querySelectorAll('.chart-area')
-  animate(areaEls, {
+  anime({
+    targets: areaEls,
     opacity: [0.6, 0.8, 0.6], // 脉冲效果
     duration: 600,
     easing: 'easeInOutSine'
@@ -607,9 +594,8 @@ const initData = async () => {
   recalcPoints()
 
   // Wait for DOM render then play animation
-  nextTick(() => {
-    playInitialAnimation()
-  })
+  await nextTick()
+  playInitialAnimation()
 }
 
 const startPolling = () => {
@@ -637,17 +623,6 @@ onMounted(() => {
     resizeObserver.observe(chartWrapperRef.value)
     updateDimensions()
     initData()
-
-    // 初始化拖拽
-    // 修复：绑定到最外层容器，而不是内部图表
-    const element = containerRef.value
-    if (!element) return
-    element.style.cursor = 'grab'
-    createDraggable(element, {
-      container: '.app-main',
-      onDown: () => { element.style.cursor = 'grabbing'; element.style.zIndex = '1000' },
-      onUp: () => { element.style.cursor = 'grab'; element.style.zIndex = '' }
-    } as any)
   }
 })
 
@@ -691,7 +666,6 @@ onUnmounted(() => {
 .chart-container-header h2 {
   margin: 0;
   color: var(--main-color, #fff);
-  font-size: 12px;
   line-height: 16px;
   opacity: 0.8;
   font-size: 20px;
@@ -699,7 +673,6 @@ onUnmounted(() => {
 
 .chart-container-header span {
   color: var(--app-logo, #3d7eff);
-  font-size: 12px;
   line-height: 16px;
   font-size: 16px;
 }

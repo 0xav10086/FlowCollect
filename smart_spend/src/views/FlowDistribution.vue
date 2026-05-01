@@ -35,9 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-// @ts-ignore
-import { createDraggable } from 'animejs/draggable'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 interface NodeDist {
   name: string
@@ -155,7 +153,7 @@ const fetchData = async () => {
     historyTraffic.value = formatBytes(historyTotal)
     
     // 2. 映射数据并计算百分比
-    distribution.value = rawDist.map((item: any, index: number) => {
+    distribution.value = rawDist.map((item: any) => {
       const currentPct = currentTotal > 0 ? Math.round((item.down_value / currentTotal) * 100) : 0
       const histVal = nodeHistory.value[item.name] || 0
       const histPct = historyTotal > 0 ? Math.round((histVal / historyTotal) * 100) : 0
@@ -192,16 +190,6 @@ onMounted(() => {
   loadLocalStorage()
   fetchData()
   startPolling()
-  
-  if (containerRef.value) {
-    const element = containerRef.value
-    element.style.cursor = 'grab'
-    createDraggable(element, {
-      container: '.app-main',
-      onDown: () => { element.style.cursor = 'grabbing'; element.style.zIndex = '1000' },
-      onUp: () => { element.style.cursor = 'grab'; element.style.zIndex = '' }
-    } as any)
-  }
 })
 
 onUnmounted(() => {
@@ -231,7 +219,6 @@ onUnmounted(() => {
 .chart-container-header h2 {
   margin: 0;
   color: var(--main-color);
-  font-size: 12px;
   line-height: 16px;
   opacity: 0.8;
   font-size: 20px;
@@ -241,12 +228,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  font-size: 16px;
 }
 
 .total-badge {
   color: var(--main-color);
-  font-size: 10px;
   font-weight: 600;
   opacity: 0.7;
   font-size: 16px;
@@ -285,14 +270,16 @@ onUnmounted(() => {
 
 .legend-list:not(.scrollable) .progress-type,
 .legend-list:not(.scrollable) .progress-amount {
-  /* 自适应字号：节点越少字越大。计算公式：基准24px - (数量 * 0.8px)，限制在 14px 到 16px 之间 */
-  font-size: clamp(14px, calc(24px - (var(--item-count) * 0.8px)), 22px);
+  font-size: 14px; /* Fallback */
+  font-size: clamp(14px, calc(24px - (var(--item-count, 1) * 0.8px)), 22px);
   line-height: 1.4;
 }
 
 .legend-list:not(.scrollable) .progress-color {
-  width: clamp(10px, calc(18px - (var(--item-count) * 0.6px)), 16px);
-  height: clamp(10px, calc(18px - (var(--item-count) * 0.6px)), 16px);
+  width: 10px; /* Fallback */
+  width: clamp(10px, calc(18px - (var(--item-count, 1) * 0.6px)), 16px);
+  height: 10px; /* Fallback */
+  height: clamp(10px, calc(18px - (var(--item-count, 1) * 0.6px)), 16px);
 }
 
 /* Case 2: >= 10 items (Scrollable, 10 items per view) */
@@ -310,13 +297,10 @@ onUnmounted(() => {
 .progress-bar-info {
   display: flex;
   align-items: center;
-  /* margin-bottom: 12px; 移除固定间距，改由布局控制 */
   width: 100%;
 }
 
 .progress-color {
-  width: 10px;
-  height: 10px;
   border-radius: 50%;
   margin-right: 8px;
   flex-shrink: 0;

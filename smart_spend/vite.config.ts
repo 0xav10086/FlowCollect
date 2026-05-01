@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import tailwindcss from '@tailwindcss/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
@@ -10,7 +9,6 @@ import { resolve } from 'path'  // 使用具名导入
 export default defineConfig({
     plugins: [
         vue(),
-        tailwindcss(),
         AutoImport({
             // 自动导入 Vue 相关函数，如：ref, reactive, toRef...
             imports: ['vue', 'vue-router', 'pinia'],

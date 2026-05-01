@@ -1,0 +1,16 @@
+#Name,TargetGroup,Behavior,LocalPath,URL
+Global,Switch,domain,./RuleSet/Global.yaml,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Global/Global_Domain.yaml
+Gemini,JP,classical,./RuleSet/Gemini.yaml,https://raw.githubusercontent.com/SkywalkerJi/Clash-Rules/master/AI/Gemini.yaml
+SteamCN,DIRECT,classical,./RuleSet/SteamCN.yaml,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/SteamCN/SteamCN.yaml
+Telegram,HK,classical,./RuleSet/Telegram.yaml,https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Telegram/Telegram.yaml
+Steam,Switch,classical,./RuleSet/Steam.yaml,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Steam/Steam.yaml
+Notion,Switch,classical,./RuleSet/Notion.yaml,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Notion/Notion.yaml
+Microsoft,DIRECT,classical,./RuleSet/Microsoft.yaml,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Microsoft/Microsoft.yaml
+Spotify,DIRECT,classical,./RuleSet/Spotify.yaml,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Spotify/Spotify.yaml
+Youtube,HK,domain,./RuleSet/Youtube.yaml,https://raw.githubusercontent.com/snapei/clash-pro-rules/release/youtube.txt
+Twitch,HK,classical,./RuleSet/Twitch.yaml,https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Twitch/Twitch.yaml
+OpenAI,Japan,classical,./RuleSet/OpenAI.yaml,https://raw.githubusercontent.com/SkywalkerJi/Clash-Rules/master/AI/OpenAI.yaml
+Apple,DIRECT,classical,./RuleSet/Apple.yaml,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Apple/Apple.yaml
+Google,bemly,domain,./RuleSet/Google.yaml,https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/google.txt
+China,DIRECT,domain,./RuleSet/China.yaml,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/China/China_Domain.yaml
+Github,bemly,classical,./RuleSet/GitHub.yaml,https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/GitHub/GitHub.yaml

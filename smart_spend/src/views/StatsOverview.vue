@@ -12,10 +12,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
-import ChartContainer from '@/views/ChartContainer.vue'
-// @ts-ignore Anime.js V4 Draggable 模块
-import { createDraggable } from 'animejs/draggable'
+import { ref, onMounted } from 'vue'
+// 修改为相对路径以避免别名解析问题
+import ChartContainer from './ChartContainer.vue'
 
 const containerRef = ref<HTMLElement | null>(null)
 const chartStats = ref<any[]>([])
@@ -123,22 +122,6 @@ const fetchStats = async () => {
     }
 
     chartStats.value = stats
-    
-    // 数据加载完成后初始化拖拽
-    nextTick(() => {
-      if (containerRef.value) {
-        const containers = containerRef.value.querySelectorAll('.chart-container')
-        containers.forEach((el) => {
-          const element = el as HTMLElement
-          element.style.cursor = 'grab'
-          createDraggable(element, {
-            container: '.app-main',
-            onDown: () => { element.style.cursor = 'grabbing'; element.style.zIndex = '1000' },
-            onUp: () => { element.style.cursor = 'grab'; element.style.zIndex = '' }
-          } as any)
-        })
-      }
-    })
   } catch (e) {
     console.error('Failed to fetch stats:', e)
   }

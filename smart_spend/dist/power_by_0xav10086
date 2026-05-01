@@ -1,0 +1,349 @@
+port: 8080
+mixed-port: 7890
+socks-port: 7891
+redir-port: 9797
+tproxy-port: 9898
+external-controller: 127.0.0.1:9091
+allow-lan: true
+mode: rule
+log-level: warning
+ipv6: false
+tcp-keep-alive: true
+tcp-keep-alive-idle: 600
+tcp-keep-alive-interval: 15
+# tcp-concurrent: true
+# find-process-mode: strict
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/20
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.localdomain"
+    - "*.example"
+    - "*.invalid"
+    - "*.localhost"
+    - "*.home.arpa"
+    - "time.*.apple.com"
+    - "lancache.*"
+    - "+.push.apple.com"
+    - "+.mask.icloud.com"
+    - "+.mask-h2.icloud.com"
+    - "+.fflink.cc"       
+    - "+.fflinkb02.cc"
+    - "+.0xav10086.space"
+  default-nameserver:
+    - tls://8.8.8.8
+    - tls://223.5.5.5
+    - tls://1.1.1.1
+    - 114.114.114.114
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+    - tls://223.5.5.5:853
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://dns.cloudflare.com/dns-query
+    - https://dns.google/dns-query
+    - 8.8.8.8
+  dns-hijack:
+    - any:53
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    domain:
+      - "+.google.com"
+      - "+.facebook.com"
+      - "+.youtube.com"
+      - "+.github.com"
+      - "+.telegram.org"
+  nameserver-policy:
+    "geosite:cn": [223.5.5.5, 114.114.114.114]
+    "geosite:private": [223.5.5.5, 114.114.114.114]
+    "geosite:apple": [223.5.5.5, 114.114.114.114]
+    "geosite:geolocation-!cn": [8.8.8.8]
+    "geosite:steam": [1.1.1.1, 8.8.8.8]
+    "geosite:netflix": [1.1.1.1, 8.8.8.8]
+    "a06.fflink.cc": [223.5.5.5]
+    "flashfox.cc": [223.5.5.5]
+    "dash.0xav10086.space": [223.5.5.5, 114.114.114.114]
+    "proxy.0xav10086.space": [223.5.5.5, 114.114.114.114]
+tun:
+  exclude-package: []
+  enable: true
+  stack: mixed
+  auto-route: true
+  auto-direct: true
+  auto-detect-interface: true
+  mtu: 1420
+  #  gso: true
+  #  gso-max-size: 65536
+  auto-redirect: true
+  route-address:
+    - 198.18.0.0/16
+  route-exclude-address:
+    - 192.168.0.0/16
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 172.22.1.0/24
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 443]
+      override-destination: false
+    TLS:
+      ports: [443]
+  skip-domain: [+.push.apple.com]
+  skip-dst-address:
+    [
+      91.105.192.0/23,
+      91.108.4.0/22,
+      91.108.8.0/21,
+      91.108.16.0/21,
+      91.108.56.0/22,
+      95.161.64.0/20,
+      149.154.160.0/20,
+      185.76.151.0/24,
+    ]
+geo-auto-update: true
+geo-update-interval: 240
+geodata-mode: false
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+
+proxies:
+   - name: "ua3f-proxy"
+     type: socks5
+     server: 127.0.0.1
+     port: 1080
+     udp: false
+
+proxy-providers:
+  Global-ISP1:
+    type: http
+    url: "https://dash.0xav10086.space/shanhuyun_node.yaml"
+    interval: 86400
+    path: "./Proxy-Providers/shanhuyun_node.yaml"
+    health-check:
+      enable: true
+      interval: 600
+      url: https://cp.cloudflare.com/generate_204
+  Global-ISP2:
+    type: http
+    url: "https://dash.0xav10086.space/bemly_node.yaml"
+    interval: 86400
+    path: "./Proxy-Providers/bemly.yaml"
+    health-check:
+      enable: true
+      interval: 600
+      url: https://cp.cloudflare.com/generate_204
+  Global-ISP3:
+    type: http
+    url: "https://dash.0xav10086.space/cf_node.yaml"
+    interval: 86400
+    path: "./Proxy-Providers/cf_0xav10086.yaml"
+    health-check:
+      enable: true
+      interval: 600
+      url: https://cp.cloudflare.com/generate_204
+
+proxy-groups:
+
+  # ────────────── fox（ISP1）group（url-test）──────────────
+  - name: Japan-fox
+    type: url-test
+    use:
+      - Global-ISP1
+    filter: "Japan|JP|🇯🇵"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: HK-fox
+    type: url-test
+    use:
+      - Global-ISP1
+    filter: "HK"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: US-fox
+    type: url-test
+    use:
+      - Global-ISP1
+    filter: "US|USA|🇺🇸"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: all-fox
+    type: url-test
+    use:
+      - Global-ISP1
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  # ────────────── bemly (ISP2)group（select）──────────────
+  - name: Japan-bemly
+    type: select
+    use:
+      - Global-ISP2
+    filter: "🇯🇵"
+
+  - name: US-bemly
+    type: select
+    use:
+      - Global-ISP2
+    filter: "🇺🇸"
+
+  - name: all-bemly
+    type: url-test
+    use:
+      - Global-ISP2
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  # ────────────── cf (ISP3)group（select）──────────────
+  - name: HK-cf
+    type: url-test
+    use:
+      - Global-ISP3
+    filter: "HK"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: all-cf
+    type: url-test
+    use: [Global-ISP3]
+    url: https://cp.cloudflare.com/generate_204
+
+  # ────────────── Japan group：fallback ──────────────
+  - name: Japan
+    type: fallback
+    proxies:
+      - Japan-fox 
+      - Japan-bemly
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+
+  # ────────────── US group：fallback ──────────────
+  - name: US
+    type: fallback
+    proxies:
+      - US-fox
+      - US-bemly
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+
+  # ────────────── HK group：url-test ──────────────
+  - name: HK
+    type: fallback
+    proxies:
+      - HK-fox
+      - HK-cf
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+
+  # ────────────── 其他组保持不变 ──────────────
+  - name: Switch
+    type: url-test
+    use: [Global-ISP1, Global-ISP3]
+
+  - name: bemly
+    type: fallback
+    proxies:
+      - all-cf
+      - all-bemly
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+
+  - name: direct
+    type: select
+    proxies: [DIRECT, ua3f-proxy]
+    url: https://cp.cloudflare.com/generate_204
+
+rules:
+
+  - DOMAIN-SUFFIX,0xav10086.space,DIRECT,no-resolve
+
+  - RULE-SET,86RejectRules,REJECT
+
+  - RULE-SET,86DirectRules,DIRECT
+
+  - RULE-SET,86JPRules,Japan
+  - RULE-SET,86HKRules,HK
+  - RULE-SET,86USRules,US
+  - RULE-SET,86BemlyRules,bemly
+  - RULE-SET,86SwitchRules,Switch
+
+  - GEOIP,LAN,DIRECT
+  - GEOIP,CN,DIRECT
+  - NETWORK,udp,DIRECT
+  - MATCH,DIRECT
+
+rule-providers:
+  86DirectRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86DirectRules.yaml"
+    path: ./RuleSet/86DirectRules.yaml
+    interval: 86400
+    
+  86RejectRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86RejectRules.yaml"
+    path: ./RuleSet/86RejectRules.yaml
+    interval: 86400
+    
+  86SwitchRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86SwitchRules.yaml"
+    path: ./RuleSet/86SwitchRules.yaml
+    interval: 86400
+    
+  86JPRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86JPRules.yaml"
+    path: ./RuleSet/86JPRules.yaml
+    interval: 86400
+    
+  86HKRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86HKRules.yaml"
+    path: ./RuleSet/86HKRules.yaml
+    interval: 86400
+    
+  86USRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86USRules.yaml"
+    path: ./RuleSet/86USRules.yaml
+    interval: 86400
+    
+  86BemlyRules:
+    type: http
+    behavior: classical
+    url: "https://dash.0xav10086.space/RuleSet/86BemlyRules.yaml"
+    path: ./RuleSet/86BemlyRules.yaml
+    interval: 86400
+external-ui: ./dashboard

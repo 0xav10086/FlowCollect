@@ -46,8 +46,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-// @ts-ignore
-import { createDraggable } from 'animejs/draggable'
 
 interface DeviceStat {
   name: string
@@ -220,16 +218,6 @@ onMounted(() => {
 
   fetchData()
   pollTimer = window.setInterval(fetchData, 5000)
-
-  if (containerRef.value) {
-    const element = containerRef.value
-    element.style.cursor = 'grab'
-    createDraggable(element, {
-      container: '.app-main',
-      onDown: () => { element.style.cursor = 'grabbing'; element.style.zIndex = '1000' },
-      onUp: () => { element.style.cursor = 'grab'; element.style.zIndex = '' }
-    } as any)
-  }
 })
 
 onUnmounted(() => {
