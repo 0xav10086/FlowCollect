@@ -117,7 +117,7 @@ func processDailyReport() {
 
 	subMsg := "【机场详情】\n"
 	var totalAirportUsageToday int64
-	for _, url := range subUrls {
+	for fileName, url := range subUrls {
 		used, total, expire, err := fetchSubInfo(url)
 		if err == nil {
 			db.Create(&SubSnapshot{Date: today, SubUrl: url, Used: used, Total: total, Expire: expire})
@@ -136,8 +136,8 @@ func processDailyReport() {
 				daysLeft = (total - used) / dailyUsed
 			}
 
-			subMsg += fmt.Sprintf("- 机场: %s...\n  今日消耗: %s | 剩余: %s | 预计还可用 %d 天\n",
-				url[:15], formatBytes(dailyUsed), formatBytes(total-used), daysLeft)
+			subMsg += fmt.Sprintf("- 机场 (%s): %s...\n  今日消耗: %s | 剩余: %s | 预计还可用 %d 天\n",
+				fileName, url[:15], formatBytes(dailyUsed), formatBytes(total-used), daysLeft)
 		}
 	}
 
@@ -171,13 +171,13 @@ func updateSubscriptionData() {
 	subUrls := conf.SubUrls
 	confLock.RUnlock()
 
-	for _, url := range subUrls {
+	for fileName, url := range subUrls {
 		used, total, expire, err := fetchSubInfo(url)
 		if err == nil {
 			db.Create(&SubSnapshot{Date: today, SubUrl: url, Used: used, Total: total, Expire: expire})
-			log.Printf("订阅 [%s] 更新成功 | 已用: %s", url, formatBytes(used))
+			log.Printf("订阅 [%s] 更新成功 | 已用: %s", fileName, formatBytes(used))
 		} else {
-			log.Printf("订阅 [%s] 更新失败: %v", url, err)
+			log.Printf("订阅 [%s] 更新失败: %v", fileName, err)
 		}
 	}
 }

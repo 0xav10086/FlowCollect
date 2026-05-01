@@ -34,6 +34,12 @@ func main() {
 	_, _ = c.AddFunc("0 3 * * *", func() {
 		cleanupOldData(30)
 	})
+	// 添加定时执行自动更新节点与规则的脚本任务（每天凌晨 4:00 执行一次）
+	_, _ = c.AddFunc("0 4 * * *", func() {
+		log.Println("⏰ 定时任务触发: 自动更新节点与规则...")
+		// 利用 yaml_config.go 中暴露的内部触发逻辑
+		triggerUpdateTask()
+	})
 	c.Start()
 
 	// 5. 启动时立即更新一次订阅数据
@@ -41,6 +47,19 @@ func main() {
 
 	// 6. 启动 Web 服务
 	r := gin.Default()
+
+	// 解决跨域问题（开发环境需要，如果前端 Nginx 反代则不需要）
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
 
 	// API 路由组
 	api := r.Group("/api")
@@ -53,6 +72,8 @@ func main() {
 		{
 			protected.GET("/stats", handleGetStats)
 			protected.GET("/fake/stats", handleFakeGetStats)
+			// 触发节点更新的接口，为了安全起见必须鉴权
+			protected.POST("/trigger-update", HandleTriggerUpdate)
 		}
 	}
 	// 流量上报接口增加 Token 鉴权中间件

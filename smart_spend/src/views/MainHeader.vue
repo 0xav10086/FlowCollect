@@ -18,7 +18,7 @@
     <el-dialog v-model="dialogVisible" title="获取订阅配置" width="400px">
       <div class="node-list">
         <el-button class="node-btn" type="success" @click="copySubscription">
-          复制 Clash 总订阅链接 (power_by_0xav10086)
+          复制 Clash 总订阅链接
         </el-button>
         <el-button class="node-btn trigger-update-btn" type="primary" @click="triggerUpdate">
           触发手动更新节点与规则
@@ -74,7 +74,7 @@ const copySubscription = async () => {
 const triggerUpdate = async () => {
   try {
     const confirm = await ElMessageBox.confirm(
-      '此操作将在服务器后台执行节点抓取和规则合并脚本，确认继续？',
+      '此操作将在服务器后台执行节点抓取和规则合并逻辑，确认继续？',
       '触发更新',
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )

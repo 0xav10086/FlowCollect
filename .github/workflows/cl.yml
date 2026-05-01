@@ -1,0 +1,52 @@
+name: FlowCollect Dashboard CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'smart_spend/**' # 只有前端代码改变时才触发
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'smart_spend/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # 根据您的环境选择合适的 Node 版本
+          cache: 'npm'
+          cache-dependency-path: 'smart_spend/package-lock.json'
+
+      - name: Install Dependencies
+        working-directory: ./smart_spend
+        run: npm ci # 使用 ci 保证依赖版本与 lock 文件完全一致
+
+      - name: Build Project
+        working-directory: ./smart_spend
+        run: npm run build
+
+      - name: Deploy to VPS via rsync
+        uses: Burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete
+          path: smart_spend/dist/   # 本地构建后的目录
+          remote_path: /var/www/flow_collect # VPS 上的目标目录
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_KEY }}
