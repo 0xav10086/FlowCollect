@@ -1,0 +1,6 @@
+[client]
+MihomoAPIAddr = http://127.0.0.1:9097
+MihomoSecret  = YOUR_MIHOMO_SECRET
+RemoteServer  = http://YOUR_VPS_IP:1234/report
+RemoteToken   = A_SECURE_RANDOM_STRING
+DeviceID      = MyDevice

@@ -1,4 +1,5 @@
 # FlowCollect 配置模板
+# 在 client 和 server 文件夹中也有示例文件:)
 # 以下是给客户端的
 
 [client]

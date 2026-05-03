@@ -1,0 +1,13 @@
+[server]
+ListenPort  = :1234
+ServerToken = YourSecretToken
+DBPath      = database.db
+SubUrls     = ["a.yaml"]="https://url",
+              ["b.yaml"]="https://url"
+
+[smtp]
+SMTPHost  = smtp.qq.com
+SMTPPort  = 587
+EmailUser = qq@qq.com
+EmailPass = emailpass
+EmailTo   = qq@qq.com
