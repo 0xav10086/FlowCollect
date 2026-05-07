@@ -6,6 +6,7 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,10 +18,27 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/websocket"
-	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
 )
 
-// 定义配置结构体
+// ── YAML 结构体：映射 Clash config.yaml ──
+
+// FlowCollectExtension 自定义顶层扩展字段
+type FlowCollectExtension struct {
+	RemoteServer string `yaml:"remote-server"`
+	RemoteToken  string `yaml:"remote-token"`
+	DeviceID     string `yaml:"device-id"`
+}
+
+// ClashConfig 仅解析 FlowCollect 需要的字段，其余忽略
+type ClashConfig struct {
+	ExternalController string               `yaml:"external-controller"`
+	Secret             string               `yaml:"secret"`
+	FlowCollect        FlowCollectExtension `yaml:"x-flow-collect"`
+}
+
+// ── 运行时配置（已转换） ──
+
 type Config struct {
 	MihomoAPIAddr string
 	MihomoSecret  string
@@ -30,90 +48,88 @@ type Config struct {
 	LocalLogFile  string
 }
 
+// ── 全局变量 ──
+
 var (
 	conf       Config
 	confLock   sync.RWMutex
 	lastStats  = make(map[string]Conn)
-	iniPath    = "ClientSetting.ini"
+	configPath string
 	reportChan = make(chan ReportData, 100)
 )
 
-func init() {
-	// 智能定位配置文件：如果当前目录找不到，尝试在可执行文件所在目录查找
-	if _, err := os.Stat(iniPath); os.IsNotExist(err) {
-		if exe, err := os.Executable(); err == nil {
-			exeDir := filepath.Dir(exe)
-			altPath := filepath.Join(exeDir, "ClientSetting.ini")
-			if _, err := os.Stat(altPath); err == nil {
-				iniPath = altPath
-				fmt.Printf("当前目录未找到配置，已切换至可执行文件目录: %s\n", iniPath)
-			}
-		}
+// resolveMihomoAPI 将 Clash 的 external-controller 转换为可用的 HTTP URL
+// Clash 格式: "0.0.0.0:9090" 或 "127.0.0.1:9090"
+// 转换后: "http://127.0.0.1:9090"
+func resolveMihomoAPI(controller string) string {
+	if controller == "" {
+		return "http://127.0.0.1:9090"
 	}
-
-	// 程序启动时首次加载
-	if err := loadConfig(); err != nil {
-		fmt.Printf("初始加载配置文件失败: %v，将使用代码内置默认值\n", err)
-		applyDefaults()
+	// 如果已经包含协议前缀，直接返回
+	if strings.HasPrefix(controller, "http://") || strings.HasPrefix(controller, "https://") {
+		return controller
 	}
-	// 启动后台监控协程
-	go watchConfig()
+	// 将 0.0.0.0 替换为 127.0.0.1（本地连接）
+	addr := strings.Replace(controller, "0.0.0.0", "127.0.0.1", 1)
+	return "http://" + addr
 }
 
-// 加载配置的函数
+// loadConfig 从 Clash config.yaml 加载配置
 func loadConfig() error {
-	cfg, err := ini.Load(iniPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("读取配置失败: %w", err)
+	}
+
+	var cc ClashConfig
+	if err := yaml.Unmarshal(data, &cc); err != nil {
+		return fmt.Errorf("解析 YAML 失败: %w", err)
 	}
 
 	confLock.Lock()
 	defer confLock.Unlock()
 
-	section := cfg.Section("")
 	conf = Config{
-		MihomoAPIAddr: section.Key("MihomoAPIAddr").MustString("http://127.0.0.1:9090"),
-		MihomoSecret:  section.Key("MihomoSecret").MustString(""),
-		RemoteServer:  section.Key("RemoteServer").MustString(""),
-		RemoteToken:   section.Key("RemoteToken").MustString("YourSecretToken"),
-		DeviceID:      section.Key("DeviceID").MustString("PC-Windows"),
-		LocalLogFile:  section.Key("LocalLogFile").MustString("node_traffic_stats.json"),
+		MihomoAPIAddr: resolveMihomoAPI(cc.ExternalController),
+		MihomoSecret:  cc.Secret,
+		RemoteServer:  cc.FlowCollect.RemoteServer,
+		RemoteToken:   cc.FlowCollect.RemoteToken,
+		DeviceID:      cc.FlowCollect.DeviceID,
+		LocalLogFile:  "node_traffic_stats.json",
 	}
 
-	fmt.Printf("[%s] 配置文件加载/更新成功\n", time.Now().Format("15:04:05"))
+	// 兜底：如果 x-flow-collect 未配置，使用默认值
+	if conf.DeviceID == "" {
+		hostname, _ := os.Hostname()
+		conf.DeviceID = hostname
+		if conf.DeviceID == "" {
+			conf.DeviceID = "android-device"
+		}
+	}
+	if conf.RemoteToken == "" {
+		conf.RemoteToken = "YourSecretToken"
+	}
+
+	fmt.Printf("[%s] 配置加载成功 | MihomoAPI: %s | DeviceID: %s | Server: %s\n",
+		time.Now().Format("15:04:05"), conf.MihomoAPIAddr, conf.DeviceID, conf.RemoteServer)
 	return nil
 }
 
-func applyDefaults() {
-	confLock.Lock()
-	defer confLock.Unlock()
-
-	conf = Config{
-		MihomoAPIAddr: "http://127.0.0.1:9090",
-		MihomoSecret:  "abcd",
-		RemoteServer:  "",
-		RemoteToken:   "YourSecretToken",
-		DeviceID:      "Device-Default",
-		LocalLogFile:  "node_traffic_stats.json",
-	}
-}
-
-// 监控文件变化的协程
+// watchConfig 监控配置文件变化并热重载
 func watchConfig() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		fmt.Println("创建监听器失败:", err)
+		fmt.Println("创建文件监听器失败:", err)
 		return
 	}
 	defer watcher.Close()
 
-	err = watcher.Add(iniPath)
-	if err != nil {
-		// 如果文件不存在，每隔5秒尝试重新添加，直到文件被创建
+	if err := watcher.Add(configPath); err != nil {
+		// 文件不存在时持续等待
 		go func() {
 			for {
 				time.Sleep(5 * time.Second)
-				if err := watcher.Add(iniPath); err == nil {
+				if err := watcher.Add(configPath); err == nil {
 					loadConfig()
 					break
 				}
@@ -127,7 +143,6 @@ func watchConfig() {
 			if !ok {
 				return
 			}
-			// 当文件被修改时重新加载
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				loadConfig()
 			}
@@ -140,7 +155,7 @@ func watchConfig() {
 	}
 }
 
-// --- 业务模型保持不变 ---
+// ── 业务模型 ──
 
 type Conn struct {
 	ID       string   `json:"id"`
@@ -156,7 +171,7 @@ type ReportData struct {
 	UpDelta     int64  `json:"up_delta"`
 	DownDelta   int64  `json:"down_delta"`
 	IsProxy     bool   `json:"is_proxy"`
-	ActiveConns int    `json:"active_connections"` // 新增：活跃连接数
+	ActiveConns int    `json:"active_connections"`
 }
 
 type NodeStats struct {
@@ -165,11 +180,61 @@ type NodeStats struct {
 }
 
 func main() {
+	// ── 命令行参数 ──
+	configFile := flag.String("c", "", "Clash config.yaml 路径 (必填或通过环境变量 FLOW_COLLECT_CONFIG)")
+	flag.Parse()
+
+	// 确定配置文件路径
+	configPath = *configFile
+	if configPath == "" {
+		configPath = os.Getenv("FLOW_COLLECT_CONFIG")
+	}
+	if configPath == "" {
+		// 尝试智能定位：当前目录 → 可执行文件目录 → Android 默认路径
+		candidates := []string{
+			"config.yaml",
+			"../clash/config.yaml",
+		}
+		if exe, err := os.Executable(); err == nil {
+			candidates = append(candidates, filepath.Join(filepath.Dir(exe), "config.yaml"))
+		}
+		// Android 默认路径
+		candidates = append(candidates, "/data/adb/box/clash/config.yaml")
+
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				configPath = p
+				break
+			}
+		}
+	}
+	if configPath == "" {
+		fmt.Fprintln(os.Stderr, "错误: 未找到配置文件，请使用 -c 参数指定 config.yaml 路径")
+		fmt.Fprintln(os.Stderr, "用法: flow_collect_client -c /path/to/config.yaml")
+		os.Exit(1)
+	}
+
+	// 验证文件存在
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "错误: 配置文件不存在: %s\n", configPath)
+		os.Exit(1)
+	}
+
+	absPath, _ := filepath.Abs(configPath)
+	fmt.Printf("配置文件: %s\n", absPath)
+
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Fprintf(os.Stderr, "初始加载配置失败: %v\n", err)
+		os.Exit(1)
+	}
+	go watchConfig()
+
+	// ── 启动监控 ──
 	confLock.RLock()
-	fmt.Printf("精细化监控启动 [%s]...\n", conf.DeviceID)
+	fmt.Printf("FlowCollect 审计客户端启动 [%s]...\n", conf.DeviceID)
 	confLock.RUnlock()
 
-	// 启动 WebSocket 管理器负责异步上报
 	go websocketManager()
 
 	fmt.Println("正在初始化连接快照 (静默模式)...")
@@ -184,7 +249,7 @@ func main() {
 
 func fetchAndProcess(silent bool) {
 	confLock.RLock()
-	currConf := conf // 获取当前配置快照
+	currConf := conf
 	confLock.RUnlock()
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -193,14 +258,17 @@ func fetchAndProcess(silent bool) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("API 访问失败 (检查 Mihomo 配置):", err)
+		if !silent {
+			fmt.Println("API 访问失败:", err)
+		}
 		return
 	}
 	defer resp.Body.Close()
 
-	// 检查状态码
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("API 鉴权失败! 状态码: %d，请检查 ClientSetting.ini 中的 MihomoSecret\n", resp.StatusCode)
+		if !silent {
+			fmt.Printf("API 鉴权失败! 状态码: %d\n", resp.StatusCode)
+		}
 		return
 	}
 
@@ -212,7 +280,6 @@ func fetchAndProcess(silent bool) {
 		return
 	}
 
-	// 打印活跃连接数
 	activeConns := len(data.Connections)
 	if !silent {
 		fmt.Printf("[%s] 活跃连接数: %d\n", time.Now().Format("15:04:05"), activeConns)
@@ -243,7 +310,6 @@ func fetchAndProcess(silent bool) {
 		lastStats[c.ID] = c
 	}
 
-	// 清理已断开的连接
 	for id := range lastStats {
 		if !currentIDs[id] {
 			delete(lastStats, id)
@@ -277,9 +343,7 @@ func dispatch(nodeName string, up, down int64, activeConns int, currConf Config)
 
 	select {
 	case reportChan <- payload:
-		// 成功放入 channel
 	default:
-		// channel 满了，丢弃新数据，避免阻塞 fetchAndProcess
 		fmt.Printf("[%s] ⚠️ 发送缓冲已满，丢弃数据 (Node: %s)\n", time.Now().Format("15:04:05"), nodeName)
 	}
 }
@@ -304,7 +368,6 @@ func getWSURL(serverURL string) string {
 	} else if u.Scheme == "http" {
 		u.Scheme = "ws"
 	}
-	// 将旧的 http://ip:port/report 转换为 ws://ip:port/ws
 	if strings.HasSuffix(u.Path, "/report") {
 		u.Path = strings.TrimSuffix(u.Path, "/report") + "/ws"
 	}
@@ -342,13 +405,12 @@ func websocketManager() {
 
 		fmt.Println("[WebSocket] ✅ 连接成功，准备发送数据。")
 
-		// 循环从 channel 读取并发送数据
 		for data := range reportChan {
 			err = wsConn.WriteJSON(data)
 			if err != nil {
 				fmt.Printf("[WebSocket] ❌ 发送错误: %v。断开并重新连接...\n", err)
 				wsConn.Close()
-				break // 跳出内层循环，重新连接
+				break
 			} else {
 				fmt.Printf("[已上报 WS] %s | 节点: %-15s ↑%-10s ↓%-10s\n",
 					time.Now().Format("15:04:05"), data.NodeName, formatBytes(data.UpDelta), formatBytes(data.DownDelta))

@@ -6,7 +6,7 @@
       </h2>
       <span>Active Devices</span>
     </div>
-    
+
     <div class="device-list" :class="{ 'scrollable': devices.length >= 4}" :style="{ '--item-count': devices.length }">
       <div class="device-item" v-for="dev in devices" :key="dev.name">
         <div class="device-icon" :style="{ backgroundColor: dev.color }">
@@ -18,7 +18,7 @@
             <span class="device-name" :title="dev.name">{{ dev.name }}</span>
             <span class="uptime">{{ dev.uptimeStr }}</span>
           </div>
-          
+
           <!-- 第二行：dev.current/dev.total (activeConns) -->
           <div class="line-2">
             <span class="traffic-main" title="Download Traffic (Current/Total)">{{ dev.current }} / {{ dev.total }}</span>
@@ -39,13 +39,45 @@
             ></span>
           </div>
         </div>
+
+        <!-- Step 5: 实时节点状态按钮 -->
+        <el-button
+          class="node-panel-btn"
+          type="primary"
+          size="small"
+          circle
+          @click="openNodePanel(dev)"
+          :title="'⚡ 节点监视: ' + dev.name"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+        </el-button>
       </div>
     </div>
   </div>
+
+  <!-- Step 5: 实时节点状态抽屉 (metacubexd iframe) -->
+  <el-drawer
+    v-model="drawerVisible"
+    title="实时节点状态"
+    size="85%"
+    direction="ltr"
+    :destroy-on-close="true"
+  >
+    <iframe
+      v-if="drawerVisible"
+      :src="iframeSrc"
+      class="metacube-iframe"
+      width="100%"
+      height="100%"
+      frameborder="0"
+    />
+  </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 interface DeviceStat {
   name: string
@@ -67,6 +99,22 @@ const containerRef = ref<HTMLElement | null>(null)
 const devices = ref<DeviceStat[]>([])
 const isFake = ref(false)
 let pollTimer: number | null = null
+
+// Step 5: 实时节点状态抽屉 (metacubexd iframe)
+const drawerVisible = ref(false)
+const currentDevice = ref<DeviceStat | null>(null)
+
+const iframeSrc = computed(() => {
+  if (!currentDevice.value) return ''
+  // 使用设备名称(device_name)作为 hostname,
+  // 端口默认 9090(标准 Clash Meta API 端口), secret 留空由用户配置
+  return `/node-panel/?hostname=${encodeURIComponent(currentDevice.value.name)}&port=9090&secret=`
+})
+
+const openNodePanel = (dev: DeviceStat) => {
+  currentDevice.value = dev
+  drawerVisible.value = true
+}
 
 // 简单的颜色生成与持久化
 const getRandomColor = () => `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`
@@ -388,5 +436,21 @@ onUnmounted(() => {
   opacity: 0.7;
   margin-left: 4px;
   font-size: 16px;
+}
+
+/* Step 5: 实时节点状态按钮 */
+.node-panel-btn {
+  flex-shrink: 0;
+  margin-left: 8px;
+  transition: transform 0.2s ease;
+}
+.node-panel-btn:hover {
+  transform: scale(1.15);
+}
+
+/* Step 5: iframe 样式 — 让 metacubexd 完全接管抽屉内部滚动 */
+.metacube-iframe {
+  border: none;
+  overflow: hidden;
 }
 </style>

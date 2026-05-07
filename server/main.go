@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -60,6 +61,11 @@ func main() {
 		}
 		c.Next()
 	})
+
+	// ── 静态文件托管: 定制版 metacubexd 面板 ──
+	// 当请求 /node-panel 或 /node-panel/* 时, 映射到 smart_spend/metacubexd/ 目录
+	// 该目录是 metacubexd 的静态构建产物 (经 Steps 1-3 定制)
+	r.StaticFS("/node-panel", http.Dir("./smart_spend/metacubexd"))
 
 	// API 路由组
 	api := r.Group("/api")

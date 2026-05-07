@@ -2,114 +2,116 @@
 
 > **Agent 读取指令**：
 > 本文档定义了 FlowCollect 的宏观演进目标和架构规范。在任何对话中，你（Agent）必须以此为基准。
-> **严格禁止**试图一次性完成所有任务。必须按照人类分配的单一子任务（如“仅修改前端 UI”或“仅编译 Android 模块”）进行局部迭代。
+> **严格禁止**试图一次性完成所有任务。必须按照人类分配的单一子任务（如"仅修改前端 UI"或"仅编译 Android 模块"）进行局部迭代。
 
 ## 1. 终极愿景：主动式控制与数据平面
 FlowCollect 正在从一个被动的分布式流量审计系统升级为深度集成的代理与审计一体化平台。
-核心理念：**客户端即代理节点，服务端即单文件部署面板。**
+核心理念：**客户端采用旁路注入上报模式，服务端采用工作区目录打包部署。**
+
+## 核心架构基准：工作区分发 (Workspace Distribution)
+
+本项目的终极部署形态基于"工作区目录"，以保证高度的灵活性和模块解耦：
+
+1. **客户端 (Client - Sidecar 模式)**
+   - 不再追求完全的单文件闭环，而是以旁路注入（Sidecar）或插件的形式存在。
+   - **Android 端**：基于 `box_for_magisk`，在拉起 Clash 核心时，同时拉起 FlowCollect 的审计上报进程。
+   - **桌面端**：基于 `clash-verge-rev`，在原有的 GUI 和核心之外，增加 FlowCollect 的上报模块。
+
+2. **服务端 (Server - 目录即服务)**
+   - 服务端以目录形式提供，包含：
+     - `web/`：存放所有的前端静态资源，包括主框架 `smart_spend` 的构建产物，以及按需加载的定制版 `metacubexd` 面板。
+     - `*.yaml`：Clash 核心配置文件。
+     - `RuleSet/`：Clash 规则集目录。
+     - `86_rule_set_collect.csv`：规则集清单。
+     - `auto_update_node_and_rule.sh`：自动化更新脚本。
+   - Go 服务端只需读取目录内容运行，便于脚本后台动态更新配置而无需重启或重新编译。
 
 ## 2. 三大开源项目的 Fork 与集成职责
 
-### 2.1 前端整合：MetaCubeX/metacubexd
+### 2.1 前端整合：MetaCubeX/metacubexd `[x] 已完成`
 - **目标**：将其能力融入 FlowCollect 现有的 Vue 3 仪表盘中。
 - **集成位置**：`EquipmentStatus.vue`。
 - **工作流**：用户在设备详情页点击时，能唤起 metacubexd 面板，静默传递 `hostname`、`port` 和 `secret` 进行连接，避免视觉割裂感。
 
-### 2.2 Android 客户端架构：taamarin/box_for_magisk
+### 2.2 Android 客户端架构：taamarin/box_for_magisk `[x] Step 1-2 完成`
 - **目标**：实现底层的透明代理与无感上报。
 - **集成思路**：在 Magisk/KernelSU 模块的启动脚本中，拉起 Clash Meta 代理内核的同时，拉起 FlowCollect 的审计上报进程（Go 编译的二进制文件）。两者需实现进程级共存。
 
-### 2.3 桌面客户端架构：clash-verge-rev/clash-verge-rev
-- **目标**：构建“既能代理又能上报”的融合型可执行文件。
-- **集成思路**：利用 Go 语言的特性，将 mihomo (Clash Meta) 作为 Library 引入 FlowCollect 的 Client 代码中。使用 Goroutine 并发运行代理逻辑和审计上报逻辑，生成单一二进制文件 `fc-core`，再由 verge-rev 的前端 GUI 进行控制。
+### 2.3 桌面客户端架构：clash-verge-rev/clash-verge-rev `[ ] 待执行`
+- **目标**：为现有 GUI 增加无感上报功能。
+- **集成思路**：在 `clash-verge-rev` 原有的架构基础上，集成 FlowCollect 的上报模块，使其能在代理流量的同时将数据上报至服务端。
 
-### 2.4 服务端架构：极简单文件部署
-- **目标**：摒弃以前将 `dist` 编译文件和 Go 文件放在一起运行的繁琐模式[cite: 3]。
-- **集成思路**：使用 Go 的 `//go:embed` 特性，在编译期将 Vue 3 的前端产物直接打包进 Go 二进制文件中，实现真正的单文件运行。
+### 2.4 服务端架构：工作区目录部署 `[x] 已完成`
+- **目标**：通过分离 Go 服务与静态资源目录，实现高度灵活的热更新。
+- **集成思路**：Go 后端负责提供 API 并映射 `web/` 目录下的静态资源。后台脚本（如 `auto_update_node_and_rule.sh`）可以独立维护 `RuleSet/` 和配置，Go 后端实时读取最新状态。
 
 ## 3. Agent 执行与开发约束
-- **模块化边界**：严格维护 `client` 和 `server` 目录的隔离[cite: 3]。
-- **安全与配置**：禁止硬编码。所有配置通过 `.ini` 读取[cite: 3]，网络请求参数通过结构体抽象。
-- **状态确认机制**：Agent 在修改任何关键文件后，必须输出测试方案，等待人类反馈“测试通过”后，才能推进到下一步。
+- **模块化边界**：严格维护 `client` 和 `server` 目录的隔离。
+- **安全与配置**：禁止硬编码。所有配置通过 `.yaml` 读取，网络请求参数通过结构体抽象。
+- **状态确认机制**：Agent 在修改任何关键文件后，必须输出测试方案，等待人类反馈"测试通过"后，才能推进到下一步。
 
-## 4.前端整合细纲
+## 4. Android 客户端架构细纲
 
-### 阶段一：定制与魔改 `MetaCubeX/metacubexd` (独立项目操作)
-
-在这个阶段，Agent 的工作区是单独 clone 下来的 `metacubexd` 仓库。
-
-**Step 1: 屏蔽“配置”选项卡 (UI 裁剪)**
-*   **Agent 任务**：在 `metacubexd` 的源码中（通常在路由配置文件或侧边栏组件，如 `src/components/Sidebar` 或 `src/router` 相关文件），找到渲染侧边栏菜单的列表。
-*   **具体动作**：定位到名称为“配置”或路径为 `/settings` (或类似路径) 的菜单项，将其注释掉或通过条件渲染（如设置一个不显示的 flag）隐藏。
-*   **验收标准**：本地运行 `pnpm dev` 时，侧边栏不再显示“配置”图标，但其他如“概览”、“代理”、“连接”等均正常工作。
-
-**Step 2: 注入“静默登录”逻辑 (核心改造)**
-*   **Agent 任务**：`metacubexd` 默认打开时如果未配置后端，会弹出一个登录/连接页面。我们需要让它支持通过 URL 参数一键直连。
-*   **具体动作**：修改应用的初始化逻辑（通常在 `src/store`、`src/api` 或入口文件 `App.jsx`/`App.vue` 中），使其优先读取 URL 中的 `Query Parameters`（例如：`?hostname=192.168.1.100&port=9090&secret=your_token`）。
-*   **逻辑要求**：如果检测到这三个参数，直接将它们写入应用的本地状态（LocalStorage/State），跳过手动输入的连接界面，直接建立 WebSocket/HTTP 连接。
-
-**Step 3: 编译与打包产物**
-*   **Agent 任务**：执行构建命令（`pnpm build`）。
-*   **产出物**：获取 `dist` 目录下的所有静态文件。这就是我们真正需要的“定制版节点监视器”。
+> 历史记录 — 前端整合（原第 4 节）：已实现通过 iframe 及 URL Query (hostname/port/secret) 完成 metacubexd 在 EquipmentStatus.vue 中的无状态静默直连嵌入。涉及 Sidebar.vue/MobileBottomNav.vue UI 裁剪、auth.global.ts 路由守卫改造、endpoint.ts 临时端点机制、Nuxt SPA 构建、Gin StaticFS 托管的完整链路。当前状态：测试通过。
 
 ---
 
-### 阶段二：集成到 `FlowCollect` (回到主项目)
+### 前置准备
 
-在这个阶段，Agent 的工作区回到你的 FlowCollect 项目（Vue 3 + Go）。
+工作区：`~/box_for_magisk`（独立 clone 的 taamarin/box_for_magisk 仓库）。
 
-**Step 4: 静态资源托管 (Go 服务端)**
-*   **Agent 任务**：将阶段一得到的定制版 `metacubexd/dist` 文件夹复制到 FlowCollect 的某个目录下（例如 `smart_spend/dist/metacubexd/`）。
-*   **Go 路由配置**：如果不使用 `//go:embed`，则在 Gin 路由中增加静态目录映射：
-    ```go
-    // 假设访问 /node-panel/ 就会加载我们的定制版 metacubexd
-    r.StaticFS("/node-panel", http.Dir("./smart_spend/dist/metacubexd"))
-    ```
+集成目标：在 Magisk/KernelSU 模块开机启动时，实现 Clash Meta 内核 + FlowCollect 审计上报进程的 Sidecar 共存。
 
-**Step 5: 修改 `EquipmentStatus.vue` (前端嵌入)**
-*   **Agent 任务**：在设备的详情页面，增加一个 UI 入口并利用 `iframe` 嵌入定制面板。
-*   **具体动作 1 (增加入口)**：在界面上添加一个按钮，例如“⚡ 实时节点状态”。
-*   **具体动作 2 (编写抽屉/模态框组件)**：使用 Element Plus 的 `el-drawer` 或 `el-dialog` 组件，设置宽度为 `80%` 或全屏。
-*   **具体动作 3 (动态 iframe 挂载)**：在抽屉内部放入 `<iframe>`。当用户点击某台设备时，获取该设备的 IP、API 端口和 Token。
-*   **代码生成要求 (Agent 需输出类似以下代码)**：
-    ```vue
-    <template>
-      <el-drawer v-model="drawerVisible" title="节点实时面板" size="85%">
-        <iframe 
-          v-if="drawerVisible"
-          :src="iframeSrc" 
-          width="100%" 
-          height="100%" 
-          frameborder="0"
-          class="metacube-iframe"
-        ></iframe>
-      </el-drawer>
-    </template>
+### Step 1: Fork 分析 — 理解 box_for_magisk 模块结构
 
-    <script setup>
-    import { ref, computed } from 'vue'
+- **Agent 任务**：clone 或进入 `taamarin/box_for_magisk` 仓库，阅读其目录结构。
+- **关键文件**：
+  - `module.prop` — Magisk 模块元信息
+  - `service.sh` — 模块启动脚本（通常是 boot_completed 后执行）
+  - `post-fs-data.sh` — 更早期的初始化脚本
+  - `clash.service` 或类似 — Clash 核心的进程管理脚本
+- **产出物**：向人类汇报模块的启动流程、Clash 核心的启动参数（config.yaml 路径、端口等），以及放置附加二进制文件的目录规范。
 
-    const drawerVisible = ref(false)
-    const currentDevice = ref(null)
+### Step 2: 植入 FlowCollect 审计二进制 `[x] 已完成`
 
-    // 动态生成直连 URL
-    const iframeSrc = computed(() => {
-      if (!currentDevice.value) return ''
-      // 这里的参数名需与 Step 2 中 Agent 改造的逻辑对齐
-      return `/node-panel/?hostname=${currentDevice.value.ip}&port=${currentDevice.value.apiPort}&secret=${currentDevice.value.secret}`
-    })
+- **Agent 任务**：将 FlowCollect 的 Go 客户端编译为 Android ARM64 二进制，放入模块目录。
+- **具体动作**：
+  1. 在 FlowCollect 仓库中，确认 `client/` 目录的代码支持 Android 交叉编译（`GOOS=android GOARCH=arm64`）。
+  2. 执行交叉编译，产出 `flow_collect_client_android`。
+  3. 复制到 `box_for_magisk` 的合适目录（通常为 `<module>/bin/` 或 `<module>/data/`）。
+- **验收标准**：二进制文件存在于模块目录，且 file 命令确认架构为 `ARM aarch64`。
+- **已完成**：
+  - 废弃 INI 配置，改用 YAML（`gopkg.in/yaml.v3`）
+  - 支持 `-c` 命令行参数指定 `config.yaml` 路径
+  - 支持 `FLOW_COLLECT_CONFIG` 环境变量
+  - 智能路径检测：当前目录 → 可执行文件目录 → Android 默认路径
+  - 解析 `x-flow-collect` 扩展字段（Mihomo 忽略未知顶层字段）
+  - 编译指令：`GOOS=android GOARCH=arm64 go build -tags client -o flow_collect_client_android -ldflags="-s -w"`
 
-    const openNodePanel = (device) => {
-      currentDevice.value = device
-      drawerVisible.value = true
-    }
-    </script>
-    
-    <style scoped>
-    /* 隐藏 iframe 默认的滚动条，交由内部应用自己接管 */
-    .metacube-iframe {
-      border: none;
-      overflow: hidden;
-    }
-    </style>
-    ```
+### Step 3: 改写启动脚本 — Sidecar 进程共管
+
+- **Agent 任务**：修改 `service.sh`（或模块的进程管理器脚本），在拉起 Clash Meta 核心的同时拉起 FlowCollect 客户端。
+- **具体动作**：
+  1. 在启动 Clash 核心的命令之后（或之前），增加启动 FlowCollect 客户端的逻辑。
+  2. 确保 `flow_collect_client` 的配置参数（服务端地址、Token、设备 ID）通过环境变量或配置文件传递。
+  3. 增加进程保活逻辑：Clash 核心退出时是否同时退出 collector？collector 崩溃时是否自动重启？
+- **关键设计决策**：
+  - 两个进程的命令空间（共享 netns？Clash 需要透明代理权限）
+  - 日志输出策略（各自写独立文件，还是统一由 logd 管理）
+- **验收标准**：模块安装后重启设备，`ps | grep flow_collect` 和 `ps | grep clash` 均能看到进程在运行。
+
+### Step 4: 流量上报验证 — 端到端测试
+
+- **Agent 任务**：在真实的 Android 设备或模拟器上安装模块，验证数据链路。
+- **具体动作**：
+  1. 将模块打包为 `.zip`，通过 Magisk/KernelSU Manager 刷入。
+  2. 确认 Clash 代理正常（能科学上网）。
+  3. 确认 FlowCollect 服务端收到设备上报的流量数据（访问服务端 API `/api/stats` 能看到该设备）。
+- **验收标准**：服务端设备列表中出现新设备，且有持续的流量数据刷新。
+
+### Step 5（可选）: 模块打包与分发
+
+- **Agent 任务**：编写或更新模块的 `update.json` 和 `customize.sh`，实现模块的在线更新支持。
+- **具体动作**：
+  1. 将 FlowCollect 二进制和 Clash 核心打包进同一个模块 zip。
+  2. 在模块描述中注明集成状态。
