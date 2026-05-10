@@ -85,6 +85,9 @@ func main() {
 	// 流量上报接口增加 Token 鉴权中间件
 	r.POST("/report", TokenAuthMiddleware(), handleReport)
 
+	// WebSocket 实时上报端点（自带鉴权）
+	r.GET("/ws", handleWS)
+
 	confLock.RLock()
 	port := conf.ListenPort
 	confLock.RUnlock()
