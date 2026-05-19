@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { apiPost } from '@/utils/http'
 
 const router = useRouter()
 const username = ref('')
@@ -13,28 +14,17 @@ const handleLogin = async () => {
 
   try {
     // 发起请求给 Go 后端
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: username.value,
-        password: password.value
-      })
+    const data = await apiPost('/api/auth', {
+      username: username.value,
+      password: password.value
     })
 
-    const data = await res.json()
-
-    if (res.ok) {
-      // 登录成功：保存 Token 到 localStorage
-      localStorage.setItem('token', data.token)
-      // 跳转到首页
-      router.push('/home')
-    } else {
-      // 登录失败：显示后端返回的错误信息
-      errorMsg.value = data.error || '登录失败'
-    }
-  } catch (e) {
-    errorMsg.value = '网络连接失败，请检查后端服务'
+    // 登录成功：保存 Token 到 localStorage
+    localStorage.setItem('token', data.token)
+    // 跳转到首页
+    router.push('/home')
+  } catch (e: any) {
+    errorMsg.value = e.message || '网络连接失败，请检查后端服务'
   }
 }
 

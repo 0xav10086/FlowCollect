@@ -153,6 +153,7 @@
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 // @ts-ignore Anime.js V4
 import { animate, stagger } from 'animejs';
+import { apiFetch } from '@/utils/http'
 
 // --- Types ---
 interface DataPoint {
@@ -219,12 +220,7 @@ const formatBytes = (bytes: number) => {
 // Fetch Real Data (Blue)
 const fetchRealStats = async (): Promise<[number, number]> => {
   try {
-    const token = localStorage.getItem('token')
-    const res = await fetch('/api/stats', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (!res.ok) return [0, 0]
-    const json = await res.json()
+    const json = await apiFetch('/api/stats')
     // 使用 summary.proxy 作为实时数据点
     return json.summary ? [json.summary.proxy_up, json.summary.proxy_down] : [0, 0]
   } catch {
@@ -235,14 +231,7 @@ const fetchRealStats = async (): Promise<[number, number]> => {
 // Fetch Fake Data (Red)
 const fetchFakeStats = async (): Promise<[number, number]> => {
   try {
-    const token = localStorage.getItem('token')
-    const res = await fetch('/api/fake/stats', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (!res.ok) {
-      return [0, 0]
-    }
-    const json = await res.json()
+    const json = await apiFetch('/api/fake/stats')
     if (json.historical && json.historical.length > 0) {
       const latest = json.historical[0]
       return [parseBytes(latest.up_value), parseBytes(latest.down_value)]

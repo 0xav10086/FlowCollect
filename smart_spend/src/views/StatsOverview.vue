@@ -15,6 +15,7 @@
 import { ref, onMounted } from 'vue'
 // 修改为相对路径以避免别名解析问题
 import ChartContainer from './ChartContainer.vue'
+import { apiFetch } from '@/utils/http'
 
 const containerRef = ref<HTMLElement | null>(null)
 const chartStats = ref<any[]>([])
@@ -40,11 +41,7 @@ const getAirportName = (url: string) => {
 
 const fetchStats = async () => {
   try {
-    const token = localStorage.getItem('token')
-    const res = await fetch('/api/stats', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    const data = await res.json()
+    const data = await apiFetch('/api/stats')
     
     const stats = []
     const subStats = data.sub_stats || []

@@ -36,6 +36,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { apiFetch } from '@/utils/http'
 
 interface NodeDist {
   name: string
@@ -92,25 +93,19 @@ const loadLocalStorage = () => {
 
 const fetchData = async () => {
   try {
-    const token = localStorage.getItem('token')
     let rawDist: any[] = []
     let fetchSuccess = false
 
     // 1. Try Real API
     try {
-      const res = await fetch('/api/stats', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.node_stats && data.node_stats.length > 0) {
-          rawDist = data.node_stats.map((item: any) => ({
-            name: item.node_name,
-            down_value: item.total // Map total to down_value for compatibility
-          }))
-          isFake.value = false
-          fetchSuccess = true
-        }
+      const data = await apiFetch('/api/stats')
+      if (data.node_stats && data.node_stats.length > 0) {
+        rawDist = data.node_stats.map((item: any) => ({
+          name: item.node_name,
+          down_value: item.total // Map total to down_value for compatibility
+        }))
+        isFake.value = false
+        fetchSuccess = true
       }
     } catch (e) {
       // Ignore error, fallback to fake
@@ -118,11 +113,7 @@ const fetchData = async () => {
 
     // 2. Fallback to Fake API
     if (!fetchSuccess) {
-      const res = await fetch('/api/fake/stats', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      if (!res.ok) return
-      const data = await res.json()
+      const data = await apiFetch('/api/fake/stats')
       rawDist = data.node_distribution || []
       isFake.value = true
     }
