@@ -42,9 +42,6 @@ jobs:
           - goos: android
             goarch: arm64
             suffix: android_arm64
-          - goos: android
-            goarch: amd64
-            suffix: android_amd64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -231,7 +228,6 @@ jobs:
             | `flow_collect_client_darwin_arm64` | macOS Apple Silicon |
             | `flow_collect_client_linux_amd64` | Linux x86_64 / OpenWrt |
             | `flow_collect_client_android_arm64` | Android ARM64 |
-            | `flow_collect_client_android_amd64` | Android x86_64 (模拟器) |
 
             ### VPS 服务端资源包
             | 文件 | 说明 |

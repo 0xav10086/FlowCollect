@@ -46,7 +46,6 @@ metacubexd ──┐
    | macOS ARM | `GOOS=darwin GOARCH=arm64` | `flow_collect_client_darwin_arm64` |
    | Linux AMD64 | `GOOS=linux GOARCH=amd64` | `flow_collect_client_linux_amd64` |
    | Android ARM64 | `GOOS=android GOARCH=arm64` | `flow_collect_client_android_arm64` |
-   | Android AMD64 | `GOOS=android GOARCH=amd64` | `flow_collect_client_android_amd64` |
 
    全部采用 `CGO_ENABLED=0` 纯静态编译。
 
