@@ -112,13 +112,27 @@ CI 自动执行：
 3. 拉取上游 [metacubexd](https://github.com/MetaCubeX/metacubexd) 面板产物
 4. 打包发布到 GitHub Releases
 
-### 三大上游项目集成
+### Release 级联更新流水线
 
-| 项目 | 角色 | 状态 |
-|------|------|------|
-| [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) | 前端节点面板嵌入 | Done |
-| [taamarin/box_for_magisk](https://github.com/taamarin/box_for_magisk) | Android 客户端宿主 | Done |
-| [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev) | 桌面客户端宿主 | WIP |
+```
+上游                        核心中枢                     下游
+─────                      ──────────                  ──────────
+metacubexd ──┐
+             ├──▶ FlowCollect (Tag Release) ──▶ clash-verge-rev (桌面端)
+             │         │                         box_for_magisk (移动端)
+             │         ▼
+             │    flow_collect.tgz (VPS 部署包)
+             │         │
+             └─────────┘
+```
+
+**级联更新逻辑**：metacubexd 发布新版本 -> FlowCollect 自动拉取并集成 -> 推送 Tag 触发 Release -> 桌面端 / 移动端自动消费新产物。
+
+| 项目 | 层级 | 角色 | 状态 |
+|------|------|------|------|
+| [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) | **上游** | 前端节点面板，FlowCollect 依赖其构建产物 | Done |
+| [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev) | **下游** | 桌面客户端宿主，消费 FlowCollect Release | WIP |
+| [taamarin/box_for_magisk](https://github.com/taamarin/box_for_magisk) | **下游** | Android 客户端宿主，消费 FlowCollect Release | Done |
 
 ---
 
