@@ -114,25 +114,30 @@ CI 自动执行：
 
 ### Release 级联更新流水线
 
+以下三个项目均为 [0xav10086](https://github.com/0xav10086) 的魔改 Fork，经过定制后实现了与 FlowCollect 的深度联动。
+
 ```
-上游                        核心中枢                     下游
-─────                      ──────────                  ──────────
-metacubexd ──┐
-             ├──▶ FlowCollect (Tag Release) ──▶ clash-verge-rev (桌面端)
-             │         │                         box_for_magisk (移动端)
-             │         ▼
-             │    flow_collect.tgz (VPS 部署包)
-             │         │
-             └─────────┘
+上游 (0xav10086/metacubexd)       核心中枢                     下游 (0xav10086/*)
+───────────────────────          ──────────                  ──────────
+0xav10086/metacubexd ──┐
+                       ├──▶ FlowCollect (Tag Release) ──▶ 0xav10086/clash-verge-rev (桌面端)
+                       │         │                         0xav10086/box_for_magisk (移动端)
+                       │         ▼
+                       │    flow_collect.tgz (VPS 部署包)
+                       │         │
+                       └─────────┘
 ```
 
-**级联更新逻辑**：metacubexd 发布新版本 -> FlowCollect 自动拉取并集成 -> 推送 Tag 触发 Release -> 桌面端 / 移动端自动消费新产物。
+**级联更新逻辑**：
+- **上游更新**：`0xav10086/metacubexd` 发布新版本 -> FlowCollect Release CI 自动拉取其 `compressed-dist.tgz` 并集成到 `web/node-panel/`
+- **核心发布**：FlowCollect 推送 Tag -> CI 编译所有平台 Sidecar + 打包 `flow_collect.tgz` -> 发布到 GitHub Releases
+- **下游消费**：`0xav10086/clash-verge-rev` 和 `0xav10086/box_for_magisk` 的 CI 自动从 FlowCollect Release 拉取对应架构的客户端二进制并打包
 
 | 项目 | 层级 | 角色 | 状态 |
 |------|------|------|------|
-| [MetaCubeX/metacubexd](https://github.com/MetaCubeX/metacubexd) | **上游** | 前端节点面板，FlowCollect 依赖其构建产物 | Done |
-| [clash-verge-rev/clash-verge-rev](https://github.com/clash-verge-rev/clash-verge-rev) | **下游** | 桌面客户端宿主，消费 FlowCollect Release | WIP |
-| [taamarin/box_for_magisk](https://github.com/taamarin/box_for_magisk) | **下游** | Android 客户端宿主，消费 FlowCollect Release | Done |
+| [0xav10086/metacubexd](https://github.com/0xav10086/metacubexd) | **上游** | 魔改版节点面板，FlowCollect 自动拉取其构建产物 | Done |
+| [0xav10086/clash-verge-rev](https://github.com/0xav10086/clash-verge-rev) | **下游** | 魔改版桌面客户端，集成 FlowCollect Sidecar | WIP |
+| [0xav10086/box_for_magisk](https://github.com/0xav10086/box_for_magisk) | **下游** | 魔改版 Android Magisk 模块，集成 FlowCollect Sidecar | Done |
 
 ---
 
