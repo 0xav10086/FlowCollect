@@ -41,51 +41,48 @@
 用户浏览器是整个数据流的分叉点：静态资源走 VPS，动态数据走 CF 隧道直抵 NAS。**NAS 与 VPS 之间没有任何直接通信。**
 
 ```
-                        ┌─────────────────────────────────┐
-                        │         用户浏览器               │
-                        │  (dash.0xav10086.space)          │
-                        └────────┬──────────────┬─────────┘
-                                 │              │
-                    静态资源请求  │              │  API / WebSocket 请求
-                 (HTML/JS/CSS)   │              │  (wss://api.0xav10086.space)
-                                 │              │
-                                 ▼              ▼
-                  ┌──────────────────┐    ┌──────────────────────┐
-                  │  国内 VPS        │    │  Cloudflare Tunnel   │
-                  │                  │    │  (Zero Trust)        │
-                  │  Nginx / CDN     │    │                      │
-                  │  ┌────────────┐  │    └──────────┬───────────┘
-                  │  │ Vue 3 SPA  │  │               │
-                  │  │ (dist/)    │  │               │
-                  │  └────────────┘  │               │
-                  └──────────────────┘               │
-                                                     ▼
-                                          ┌──────────────────────┐
-                                          │  NAS / 内网 Server    │
-                                          │                      │
-                                          │  Go + Gin            │
-                                          │  ├── REST API        │
-                                          │  ├── WebSocket 实时流 │
-                                          │  └── SQLite 存储      │
-                                          └──────────┬───────────┘
-                                                     │
-                                           Sidecar 上报 (WSS)
-                                                     │
-                                          ┌──────────▼───────────┐
-                                          │  客户端 (Sidecar)     │
-                                          │                      │
-                                          │  Clash Meta / Mihomo │
-                                          │  + FlowCollect       │
-                                          │    Reporter          │
-                                          └──────────────────────┘
+                            ┌─────────────────────────────────┐
+                            │          用户浏览器               │
+                            │  (dash.0xav10086.space)         │
+                            └────────┬──────────────┬─────────┘
+                                     │              │
+                         静态资源请求 │              │ API / WebSocket 请求
+                      (HTML/JS/CSS)  │              │ (wss://nas.0xav10086.space)
+                                     ▼              │
+                 ┌──────────────────┐               │
+                 │  国内 VPS        │               │
+                 │                  │               ▼
+                 │  Nginx / CDN     │      ┌──────────────────────┐
+                 │  ┌────────────┐  │      │  Cloudflare Tunnel   │◀──────┐
+                 │  │ Vue 3 SPA  │  │      │  (Zero Trust)        │       │
+                 │  │ (dist/)    │  │      └──────────┬───────────┘       │ Sidecar 上报 (WSS)
+                 │  └────────────┘  │                 │                   │ (wss://nas.0xav10086.space)
+                 └──────────────────┘                 │                   │
+                                                      ▼                   │
+                                           ┌──────────────────────┐       │
+                                           │  NAS / 内网 Server    │       │
+                                           │                      │       │
+                                           │  Go + Gin            │       │
+                                           │  ├── REST API        │       │
+                                           │  ├── WebSocket 实时流│       │
+                                           │  └── SQLite 存储     │       │
+                                           └──────────────────────┘       │
+                                                                          │
+                                           ┌──────────────────────┐       │
+                                           │  客户端 (Sidecar)     │───────┘
+                                           │                      │
+                                           │  Clash Meta / Mihomo │
+                                           │  + FlowCollect       │
+                                           │    Reporter          │
+                                           └──────────────────────┘
 ```
 
 **拆解说明**：
 
 1. **静态资源路径**：用户浏览器访问 `dash.0xav10086.space` → 国内 VPS（Nginx）返回 Vue 3 SPA 的 `index.html`、JS、CSS 等静态文件。此路径不经过 CF 隧道。
-2. **动态数据路径**：浏览器中运行的 Vue 3 SPA 通过 `wss://api.0xav10086.space`（或 `https://`）发起 API/WebSocket 请求 → 经 Cloudflare 隧道穿透至 NAS 内网的 Go 服务端。
-3. **Sidecar 上报路径**：客户端代理内核（Clash Meta）旁路注入的 FlowCollect Reporter 通过 WSS 将流量数据上报至同一 CF 隧道端点。
-4. **物理隔离**：NAS 与 VPS 之间**零通信**。浏览器是唯一的汇聚点，两条路径在用户侧合流，在服务侧完全隔离。
+2. **动态数据路径**：浏览器中运行的 Vue 3 SPA 通过 `wss://nas.0xav10086.space`（或 `https://`）发起 API/WebSocket 请求 → 经 Cloudflare 隧道穿透至 NAS 内网的 Go 服务端。
+3. **Sidecar 上报路径**：客户端代理内核（Clash Meta）旁路注入的 FlowCollect Reporter 同样通过 `wss://nas.0xav10086.space` 将流量数据上报至 CF 隧道，再穿透至 NAS。**Sidecar 不直连 NAS，必须经 CF 隧道暴露。**
+4. **物理隔离**：NAS 与 VPS 之间**零通信**。浏览器和 Sidecar 是两个独立的请求源，均通过 CF 隧道汇聚到 NAS，VPS 仅承担静态资源分发。
 
 | 层级 | 策略 | 原因 |
 |------|------|------|
@@ -129,6 +126,10 @@ FlowCollect/
 │   │   ├── assets/              # 静态资源
 │   │   ├── App.vue              # 根组件
 │   │   └── main.ts              # 入口文件
+│   ├── public/                  # 静态配置资源（直接复制到构建产物）
+│   │   ├── *.yaml               # Clash 核心配置（节点配置：bemly/cf/shanhuyun 等）
+│   │   ├── *.csv                # 规则集清单（86_rule_set_collect.csv）
+│   │   └── RuleSet/             # Clash 规则集文件目录
 │   ├── metacubexd/              # metacubexd 面板集成
 │   ├── dist/                    # 构建产物（部署到 VPS）
 │   ├── .env.development         # 开发环境变量
