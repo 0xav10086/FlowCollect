@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -49,23 +48,25 @@ func main() {
 	// 6. 启动 Web 服务
 	r := gin.Default()
 
-	// 解决跨域问题（开发环境需要，如果前端 Nginx 反代则不需要）
+	// Cloudflare 隧道模式：信任 CF 边缘节点，从 CF-Connecting-IP 提取真实客户端 IP
+	r.TrustedPlatform = gin.PlatformCloudflare
+
+	// CORS 中间件（放行 WebSocket 升级头部 + Cloudflare 特有头部）
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers",
+			"Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, "+
+				"accept, origin, Cache-Control, X-Requested-With, "+
+				"Upgrade, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Protocol, Sec-WebSocket-Extensions, "+
+				"CF-Connecting-IP, CF-IPCountry, CF-Ray")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
 		c.Next()
 	})
-
-	// ── 静态文件托管: 定制版 metacubexd 面板 ──
-	// 当请求 /node-panel 或 /node-panel/* 时, 映射到 smart_spend/metacubexd/ 目录
-	// 该目录是 metacubexd 的静态构建产物 (经 Steps 1-3 定制)
-	r.StaticFS("/node-panel", http.Dir("./smart_spend/metacubexd"))
 
 	// API 路由组
 	api := r.Group("/api")
@@ -82,6 +83,10 @@ func main() {
 			protected.POST("/trigger-update", HandleTriggerUpdate)
 		}
 	}
+
+	// 动态订阅分发路由（无需鉴权，客户端通过 Clash 配置拉取）
+	r.GET("/sub", handleSub)
+
 	// 流量上报接口增加 Token 鉴权中间件
 	r.POST("/report", TokenAuthMiddleware(), handleReport)
 

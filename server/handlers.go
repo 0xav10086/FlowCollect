@@ -187,10 +187,10 @@ func handleGetStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"date":       today.Format("2006-01-02"),
-		"summary":    summary,
-		"node_stats": nodeStats,
-		"sub_stats":  subStats,
+		"date":         today.Format("2006-01-02"),
+		"summary":      summary,
+		"node_stats":   nodeStats,
+		"sub_stats":    subStats,
 		"device_stats": deviceStats,
 	})
 }

@@ -17,9 +17,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 配置文件常量与 Nginx 映射的静态目录一致
+// 配置文件常量（工作区相对路径，部署时与 Go 二进制同级目录）
 const (
-	WebRootDir = "/var/www/flow_collect"
+	WebRootDir = "."
 	RuleDir    = WebRootDir + "/RuleSet"
 	CSVFile    = WebRootDir + "/86_rule_set_collect.csv"
 )

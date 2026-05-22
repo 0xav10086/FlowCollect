@@ -51,7 +51,7 @@ func handleFakeGetStats(c *gin.Context) {
 		nodeValues[name] = struct{ up, down int64 }{up: upVal, down: downVal}
 
 		dist = append(dist, gin.H{
-			"name":  name,
+			"name":       name,
 			"up_value":   upVal,
 			"down_value": downVal,
 		})
@@ -100,20 +100,20 @@ func handleFakeGetStats(c *gin.Context) {
 		uptime := int64(time.Since(deviceStartTimes[devName]).Seconds())
 
 		deviceStats = append(deviceStats, gin.H{
-			"device_name":        devName,
-			"current_up":         devCurrentUp,
-			"current_down":       devCurrentDown,
+			"device_name":            devName,
+			"current_up":             devCurrentUp,
+			"current_down":           devCurrentDown,
 			"formatted_current_up":   formatNetworkBytes(float64(devCurrentUp)),
 			"formatted_current_down": formatNetworkBytes(float64(devCurrentDown)),
-			"total_up":           devTotalUp,
-			"total_down":         devTotalDown,
+			"total_up":               devTotalUp,
+			"total_down":             devTotalDown,
 			"formatted_total_up":     formatNetworkBytes(float64(devTotalUp)),
 			"formatted_total_down":   formatNetworkBytes(float64(devTotalDown)),
-			"active_connections": activeConns,
-			"closed_connections": closedConns,
-			"total_connections":  activeConns + closedConns,
-			"node_usage":         devNodeDetails,
-			"uptime":             uptime,
+			"active_connections":     activeConns,
+			"closed_connections":     closedConns,
+			"total_connections":      activeConns + closedConns,
+			"node_usage":             devNodeDetails,
+			"uptime":                 uptime,
 		})
 	}
 

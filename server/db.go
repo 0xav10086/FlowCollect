@@ -13,13 +13,13 @@ import (
 var db *gorm.DB
 
 type TrafficRecord struct {
-	ID        uint      `gorm:"primaryKey"`
-	Timestamp time.Time `gorm:"index"`
-	DeviceID  string
-	NodeName  string
-	UpDelta   int64
-	DownDelta int64
-	IsProxy   bool
+	ID          uint      `gorm:"primaryKey"`
+	Timestamp   time.Time `gorm:"index"`
+	DeviceID    string
+	NodeName    string
+	UpDelta     int64
+	DownDelta   int64
+	IsProxy     bool
 	ActiveConns int
 }
 
