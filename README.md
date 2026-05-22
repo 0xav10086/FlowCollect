@@ -113,6 +113,9 @@ FlowCollect/
 │   ├── yaml_config.go           # YAML 配置解析
 │   ├── utils.go                 # 工具函数
 │   ├── email_test.go            # 邮件告警测试
+│   ├── *.yaml                   # Clash 节点配置模板（bemly/cf/shanhuyun 等）
+│   ├── *.csv                    # 规则集清单（86_rule_set_collect.csv）
+│   ├── RuleSet/                 # Clash 规则集文件目录
 │   ├── ServerSetting.ini        # 服务端运行时配置（Git 忽略）
 │   ├── ServerSetting.ini.example# 服务端配置模板
 │   ├── go.mod / go.sum          # Go 依赖管理
@@ -126,10 +129,7 @@ FlowCollect/
 │   │   ├── assets/              # 静态资源
 │   │   ├── App.vue              # 根组件
 │   │   └── main.ts              # 入口文件
-│   ├── public/                  # 静态配置资源（直接复制到构建产物）
-│   │   ├── *.yaml               # Clash 核心配置（节点配置：bemly/cf/shanhuyun 等）
-│   │   ├── *.csv                # 规则集清单（86_rule_set_collect.csv）
-│   │   └── RuleSet/             # Clash 规则集文件目录
+│   ├── public/                  # 前端静态资源（Vite 直接复制到构建产物）
 │   ├── metacubexd/              # metacubexd 面板集成
 │   ├── dist/                    # 构建产物（部署到 VPS）
 │   ├── .env.development         # 开发环境变量
