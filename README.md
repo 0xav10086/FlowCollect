@@ -20,31 +20,72 @@
 
 ---
 
+## Prerequisites
+
+在部署 FlowCollect 之前，请确保以下基础设施已就绪：
+
+| 组件 | 说明 | 备注 |
+|------|------|------|
+| **内网 / NAS 主机** | 运行 Go 服务端（`flow_server_linux`）的 Linux 设备 | 需要长期在线，建议使用 NAS 或小型服务器 |
+| **Cloudflare Zero Trust** | 账号 + Tunnel 配置 | 用于将内网 NAS 的 API/WS 端口安全暴露到公网，**不暴露真实 IP** |
+| **国内 VPS / CDN** | 用于托管 Vue 3 前端静态资源 | 需完成 ICP 备案的域名，例如 `dash.your-domain.com` |
+| **域名** | 两个子域名（可同域） | 一个指向 VPS（前端），一个指向 CF Tunnel（后端 API） |
+| **Clash Meta / Mihomo** | 客户端代理内核 | 用于运行 Sidecar 注入的宿主环境 |
+
+---
+
 ## Architecture
 
-### 数据流向
+### 数据流向 — "Y 型"拓扑
+
+用户浏览器是整个数据流的分叉点：静态资源走 VPS，动态数据走 CF 隧道直抵 NAS。**NAS 与 VPS 之间没有任何直接通信。**
 
 ```
-┌──────────────────┐      ┌──────────────┐      ┌──────────────────────────────┐
-│  Client (Sidecar) │─────▶│  CF 隧道     │─────▶│  NAS / 内网 Server            │
-│  ┌──────────────┐ │      │  (合规入口)  │      │  ┌────────────────────────┐  │
-│  │ Clash Meta   │ │      └──────────────┘      │  │ Go + Gin               │  │
-│  │ + FlowCollect│ │                            │  │ - REST API             │  │
-│  │   Reporter   │ │                            │  │ - WebSocket 实时上报    │  │
-│  └──────────────┘ │                            │  └────────────────────────┘  │
-└──────────────────┘                             └──────────────┬───────────────┘
-                                                               │
-                                                               ▼
-                                                 ┌──────────────────────────────┐
-                                                 │  国内 VPS / CDN              │
-                                                 │  ┌────────────────────────┐  │
-                                                 │  │ Vue 3 SPA (smart_spend)│  │
-                                                 │  │ + metacubexd 面板       │  │
-                                                 │  └────────────────────────┘  │
-                                                 └──────────────────────────────┘
+                        ┌─────────────────────────────────┐
+                        │         用户浏览器               │
+                        │  (dash.0xav10086.space)          │
+                        └────────┬──────────────┬─────────┘
+                                 │              │
+                    静态资源请求  │              │  API / WebSocket 请求
+                 (HTML/JS/CSS)   │              │  (wss://api.0xav10086.space)
+                                 │              │
+                                 ▼              ▼
+                  ┌──────────────────┐    ┌──────────────────────┐
+                  │  国内 VPS        │    │  Cloudflare Tunnel   │
+                  │                  │    │  (Zero Trust)        │
+                  │  Nginx / CDN     │    │                      │
+                  │  ┌────────────┐  │    └──────────┬───────────┘
+                  │  │ Vue 3 SPA  │  │               │
+                  │  │ (dist/)    │  │               │
+                  │  └────────────┘  │               │
+                  └──────────────────┘               │
+                                                     ▼
+                                          ┌──────────────────────┐
+                                          │  NAS / 内网 Server    │
+                                          │                      │
+                                          │  Go + Gin            │
+                                          │  ├── REST API        │
+                                          │  ├── WebSocket 实时流 │
+                                          │  └── SQLite 存储      │
+                                          └──────────┬───────────┘
+                                                     │
+                                           Sidecar 上报 (WSS)
+                                                     │
+                                          ┌──────────▼───────────┐
+                                          │  客户端 (Sidecar)     │
+                                          │                      │
+                                          │  Clash Meta / Mihomo │
+                                          │  + FlowCollect       │
+                                          │    Reporter          │
+                                          └──────────────────────┘
 ```
 
-### 设计理念
+**拆解说明**：
+
+1. **静态资源路径**：用户浏览器访问 `dash.0xav10086.space` → 国内 VPS（Nginx）返回 Vue 3 SPA 的 `index.html`、JS、CSS 等静态文件。此路径不经过 CF 隧道。
+2. **动态数据路径**：浏览器中运行的 Vue 3 SPA 通过 `wss://api.0xav10086.space`（或 `https://`）发起 API/WebSocket 请求 → 经 Cloudflare 隧道穿透至 NAS 内网的 Go 服务端。
+3. **Sidecar 上报路径**：客户端代理内核（Clash Meta）旁路注入的 FlowCollect Reporter 通过 WSS 将流量数据上报至同一 CF 隧道端点。
+4. **物理隔离**：NAS 与 VPS 之间**零通信**。浏览器是唯一的汇聚点，两条路径在用户侧合流，在服务侧完全隔离。
 
 | 层级 | 策略 | 原因 |
 |------|------|------|
@@ -58,28 +99,54 @@
 
 ```
 FlowCollect/
-├── client/                  # Sidecar 客户端 (Go)
-│   ├── main.go              # 入口：流量采集 + WebSocket 上报
-│   ├── config.yaml.example  # 配置模板（x-flow-collect 扩展字段）
-│   └── agent.md             # 客户端子系统法典（AI Agent 必读）
+├── client/                      # Sidecar 客户端 (Go)
+│   ├── client.go                # 入口：流量采集 + WebSocket 上报
+│   ├── go.mod / go.sum          # Go 依赖管理
+│   ├── agent.md                 # 客户端子系统法典（AI Agent 必读）
+│   └── bin/                     # 编译产物输出目录
 │
-├── server/                  # 服务端 (Go + Gin)
-│   ├── main.go              # 入口：REST API + 静态资源托管
-│   ├── web/                 # 前端构建产物（运行时目录）
-│   └── agent.md             # 服务端子系统法典（AI Agent 必读）
+├── server/                      # 服务端 (Go + Gin)
+│   ├── main.go                  # 入口：HTTP Server 启动
+│   ├── config.go                # 配置加载
+│   ├── handlers.go              # REST API 路由处理
+│   ├── websocket.go             # WebSocket 实时数据流
+│   ├── service.go               # 业务逻辑层
+│   ├── db.go                    # SQLite 数据库操作
+│   ├── fake_api.go              # 仿真数据 API（开发/演示用）
+│   ├── yaml_config.go           # YAML 配置解析
+│   ├── utils.go                 # 工具函数
+│   ├── email_test.go            # 邮件告警测试
+│   ├── ServerSetting.ini        # 服务端运行时配置（Git 忽略）
+│   ├── ServerSetting.ini.example# 服务端配置模板
+│   ├── go.mod / go.sum          # Go 依赖管理
+│   └── agent.md                 # 服务端子系统法典（AI Agent 必读）
 │
-├── smart_spend/             # 前端 (Vue 3 + Vite + Element Plus)
+├── smart_spend/                 # 前端 (Vue 3 + Vite + Element Plus)
 │   ├── src/
-│   │   ├── views/           # 页面组件
-│   │   └── utils/           # HTTP/WS 工具模块
-│   ├── .env.development     # 开发环境变量
-│   ├── .env.production      # 生产环境变量
-│   └── agent.md             # 前端子系统法典（AI Agent 必读）
+│   │   ├── views/               # 页面组件
+│   │   ├── router/              # 路由配置
+│   │   ├── utils/               # HTTP/WS 工具模块
+│   │   ├── assets/              # 静态资源
+│   │   ├── App.vue              # 根组件
+│   │   └── main.ts              # 入口文件
+│   ├── metacubexd/              # metacubexd 面板集成
+│   ├── dist/                    # 构建产物（部署到 VPS）
+│   ├── .env.development         # 开发环境变量
+│   ├── .env.production          # 生产环境变量
+│   ├── vite.config.ts           # Vite 配置
+│   ├── tailwind.config.js       # Tailwind CSS 配置
+│   ├── package.json             # 前端依赖
+│   └── agent.md                 # 前端子系统法典（AI Agent 必读）
 │
-├── AGENTS.md                # 全局架构宪法（AI Agent 核心知识库）
-├── ROADMAP.md               # 项目进度与 Release 流水线
+├── client_build.sh              # 客户端跨平台编译脚本
+├── server_build.sh              # 服务端 + 前端一键编译脚本
+├── setting.ini.example          # 全局配置模板
+├── go.work / go.work.sum        # Go Workspace 工作区
+├── AGENTS.md                    # 全局架构宪法（AI Agent 核心知识库）
+├── ROADMAP.md                   # 项目进度与 Release 流水线
 └── .github/workflows/
-    └── release.yml          # 全自动 Release CI
+    ├── release.yml              # 全自动 Release CI
+    └── cl.yml.disabled          # 已禁用的旧 CI 配置
 ```
 
 ---
@@ -147,7 +214,7 @@ CI 自动执行：
 
 ```bash
 # 下载最新 Release
-curl -sL https://github.com/your-org/FlowCollect/releases/latest/download/flow_collect.tgz -o flow_collect.tgz
+curl -sL https://github.com/0xav10086/FlowCollect/releases/latest/download/flow_collect.tgz -o flow_collect.tgz
 
 # 解压并启动
 mkdir -p /opt/flow_collect && tar xzf flow_collect.tgz -C /opt/flow_collect/
@@ -161,7 +228,7 @@ cd /opt/flow_collect && ./flow_server_linux
 ```yaml
 # config.yaml (Mihomo / Clash Meta)
 x-flow-collect:
-  remote-server: "wss://your-domain.com/ws/traffic"
+  remote-server: "wss://api.your-domain.com/ws/traffic"
   remote-token: "your-secret-token"
   device-id: "my-device-01"
 ```
@@ -184,7 +251,7 @@ npm run dev    # 开发服务器 -> http://localhost:8687
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8080       # 开发
-VITE_API_BASE_URL=https://your-domain.com     # 生产
+VITE_API_BASE_URL=https://api.your-domain.com # 生产
 ```
 
 ---
