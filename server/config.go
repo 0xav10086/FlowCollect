@@ -14,18 +14,17 @@ import (
 
 // 配置结构体
 type ServerConfig struct {
-	ListenPort          string
-	ServerToken         string
-	DBPath              string
-	SMTPHost            string
-	SMTPPort            string
-	EmailUser           string
-	EmailPass           string
-	EmailTo             string
-	SubUrls             map[string]string // 变更为 map，键为 filename，值为 url
-	EnableClientFeature bool              // 是否启用客户端特性
-	MainSubFile         string            // 主订阅文件路径（相对于 templates/ 目录）
-	ReadMainSubConfig   bool              // 是否从主订阅文件读取端口和 Token 配置
+	ListenPort        string
+	ServerToken       string
+	DBPath            string
+	SMTPHost          string
+	SMTPPort          string
+	EmailUser         string
+	EmailPass         string
+	EmailTo           string
+	SubUrls           map[string]string // 变更为 map，键为 filename，值为 url
+	MainSubFile       string            // 主订阅文件路径（相对于 templates/ 目录）
+	ReadMainSubConfig bool              // 是否从主订阅文件读取端口和 Token 配置
 }
 
 var (
@@ -88,18 +87,17 @@ func loadConfig() error {
 	}
 
 	conf = ServerConfig{
-		ListenPort:          section.Key("ListenPort").MustString(":8686"),
-		ServerToken:         section.Key("ServerToken").MustString("YourSecretToken"),
-		DBPath:              section.Key("DBPath").MustString("./data/traffic.db"),
-		SMTPHost:            smtpSec.Key("SMTPHost").MustString("smtp.qq.com"),
-		SMTPPort:            smtpSec.Key("SMTPPort").MustString("587"),
-		EmailUser:           smtpSec.Key("EmailUser").MustString(""),
-		EmailPass:           smtpSec.Key("EmailPass").MustString(""),
-		EmailTo:             smtpSec.Key("EmailTo").MustString(""),
-		SubUrls:             subUrlsMap,
-		EnableClientFeature: section.Key("EnableClientFeature").MustBool(false),
-		MainSubFile:         section.Key("MainSubFile").MustString("main_sub.yaml"),
-		ReadMainSubConfig:   section.Key("ReadMainSubConfig").MustBool(false),
+		ListenPort:        section.Key("ListenPort").MustString(":8686"),
+		ServerToken:       section.Key("ServerToken").MustString("YourSecretToken"),
+		DBPath:            section.Key("DBPath").MustString("./data/traffic.db"),
+		SMTPHost:          smtpSec.Key("SMTPHost").MustString("smtp.qq.com"),
+		SMTPPort:          smtpSec.Key("SMTPPort").MustString("587"),
+		EmailUser:         smtpSec.Key("EmailUser").MustString(""),
+		EmailPass:         smtpSec.Key("EmailPass").MustString(""),
+		EmailTo:           smtpSec.Key("EmailTo").MustString(""),
+		SubUrls:           subUrlsMap,
+		MainSubFile:       section.Key("MainSubFile").MustString("main_sub.yaml"),
+		ReadMainSubConfig: section.Key("ReadMainSubConfig").MustBool(false),
 	}
 
 	log.Printf("[%s] 服务端配置已更新，加载了 %d 个订阅链接", time.Now().Format("15:04:05"), len(subUrlsMap))

@@ -10,9 +10,6 @@ DBPath      = ./data/traffic.db
 SubUrls     = ["bemly_node.yaml"]="https://example.com/bemly.yaml",
               ["cf_node.yaml"]="https://example.com/cf.yaml"
 
-; 是否启用客户端特性（预留扩展开关，默认关闭）
-EnableClientFeature = false
-
 ; 主订阅文件名（相对于 templates/ 目录，用于 ReadMainSubConfig 动态读取）
 MainSubFile = main_sub.yaml
 

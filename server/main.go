@@ -28,7 +28,6 @@ func main() {
 	confLock.RLock()
 	readSub := conf.ReadMainSubConfig
 	mainFile := conf.MainSubFile
-	enableClient := conf.EnableClientFeature
 	confLock.RUnlock()
 
 	if readSub {
@@ -47,15 +46,6 @@ func main() {
 			}
 			confLock.Unlock()
 		}
-	}
-
-	// 2.2 客户端特性开关
-	if enableClient {
-		log.Println("🔧 客户端特性已启用 (EnableClientFeature=true)")
-		go func() {
-			// TODO: 客户端特性预留占位，后续实现具体逻辑
-			log.Println("🔧 客户端特性协程已启动（待实现）")
-		}()
 	}
 
 	go watchConfig()
