@@ -227,11 +227,25 @@ vim /opt/flow_collect/configs/ServerSetting.ini
 
 # 将模板与规则集复制到宿主机
 cp -r server/templates/* /opt/flow_collect/templates/
+```
 
-# 启动容器
+> ⚠️ **配置文件防坑指南**：编辑 `ServerSetting.ini` 时，请务必确认以下两项使用**容器内绝对路径**：
+>
+> ```ini
+> [server]
+> ListenPort = :7886
+> DBPath     = /app/data/traffic.db
+> ```
+>
+> - `ListenPort` 必须为 `:7886`（与 `docker run -p` 映射一致）。
+> - `DBPath` **必须写 `/app/data/traffic.db`**（容器内路径），不能使用相对路径如 `traffic.db`。因为 `--user` 降权后进程的工作目录可能无写入权限，导致 SQLite 崩溃。
+
+```bash
+# 启动容器（使用当前宿主机用户的 UID:GID，避免权限问题）
 docker run -d \
   --name flow-collect \
   --restart unless-stopped \
+  --user $(id -u):$(id -g) \
   -p 7886:7886 \
   -e TZ=Asia/Shanghai \
   -v /opt/flow_collect/configs:/app/configs \
@@ -248,7 +262,36 @@ docker run -d \
 | `/opt/flow_collect/data` | `/app/data` | SQLite 数据库（持久化） |
 | `/opt/flow_collect/logs` | `/app/logs` | 运行日志 |
 
-> **权限提示**：容器默认以 `appuser`（UID 1000）运行。若挂载目录权限不足，请执行 `chown -R 1000:1000 /opt/flow_collect/{data,logs}`。
+> **权限提示**：容器通过 `--user $(id -u):$(id -g)` 以当前宿主机用户身份运行。首次部署前请确保挂载目录的所有权与当前用户一致：
+>
+> ```bash
+> sudo chown -R $(id -u):$(id -g) /opt/flow_collect/
+> ```
+
+<details>
+<summary><b>常见错误与排错 (Troubleshooting)</b></summary>
+
+#### 症状：容器日志持续报错 `unable to open database file: out of memory (14)`
+
+**原因**：这不是内存溢出。SQLite 报 `out of memory` 实际上是**文件写入权限不足**的误报。当挂载目录 `/opt/flow_collect/data/` 的所有权为 `root`，而容器通过 `--user` 以普通用户身份运行时，Go 进程无法在该目录下创建 `traffic.db` 及其 WAL 缓存文件（`*.db-shm`、`*.db-wal`）。
+
+**解决方案**：
+
+```bash
+# 1. 停止容器
+docker stop flow-collect
+
+# 2. 修复宿主机目录所有权（替换为你的实际用户）
+sudo chown -R $(id -u):$(id -g) /opt/flow_collect/
+
+# 3. 重启容器
+docker start flow-collect
+
+# 4. 验证日志恢复正常
+docker logs -f flow-collect
+```
+
+</details>
 
 #### 方案 B：二进制裸机部署
 
