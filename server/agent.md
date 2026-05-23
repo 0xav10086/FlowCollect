@@ -21,6 +21,7 @@
 | SQLite 持久化 | 流量数据本地存储 | `[x]` |
 | CORS + WebSocket 放行 | 允许跨域升级请求 | `[x]` |
 | TrustedPlatform 真实 IP | 适配 Cloudflare 隧道部署 | `[x]` |
+| 动态配置覆盖 | `ReadMainSubConfig=true` 时，启动阶段从主订阅 YAML 提取 `mixed-port`/`port` 和 `secret`，覆盖 INI 的 `ListenPort`/`ServerToken` | `[x]` |
 
 ---
 
@@ -36,7 +37,7 @@ server/
 ├── sub_handler.go               # 订阅分发：读取 templates/ 动态生成 Clash 配置
 ├── websocket.go                 # WebSocket 端点：/ws 实时流量上报接收
 ├── service.go                   # 业务逻辑：订阅抓取、日报生成、邮件发送
-├── yaml_config.go               # 模板与规则编译：下载订阅源、解析 CSV、编译 RuleSet
+├── yaml_config.go               # 模板与规则编译：下载订阅源、解析 CSV、编译 RuleSet；ExtractConfigFromMainSub 动态配置提取
 ├── db.go                        # 数据库：SQLite 模型定义与初始化（WAL 模式）
 ├── fake_api.go                  # 仿真数据：/api/fake/stats 随机流量生成器
 ├── utils.go                     # 工具函数：流量格式化（formatNetworkBytes 等）
@@ -82,6 +83,7 @@ server/
 | `RuleDir` | `./templates/RuleSet` | /sub 路由读取规则集 |
 | `CSVFile` | `./templates/86_rule_set_collect.csv` | 规则编译与 /sub 路由读取 |
 | `conf.DBPath` | `./data/traffic.db`（默认值） | SQLite 数据库路径 |
+| `conf.MainSubFile` | `./templates/{MainSubFile}` | `ReadMainSubConfig` 启用时，动态提取端口和 Token 的 YAML 源文件 |
 | 日志文件 | `./logs/server.log` | 运行日志输出 |
 
 **启动时自动创建**：`main.go` 中的 `ensureDirs()` 在任何业务逻辑之前自动创建 `data/`、`logs/`、`configs/`、`templates/` 目录，确保新环境部署不会因目录缺失而 panic。

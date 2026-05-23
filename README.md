@@ -239,6 +239,8 @@ cp -r server/templates/* /opt/flow_collect/templates/
 >
 > - `ListenPort` 必须为 `:7886`（与 `docker run -p` 映射一致）。
 > - `DBPath` **必须写 `/app/data/traffic.db`**（容器内路径），不能使用相对路径如 `traffic.db`。因为 `--user` 降权后进程的工作目录可能无写入权限，导致 SQLite 崩溃。
+>
+> **动态配置覆盖（可选）**：设置 `ReadMainSubConfig = true` 后，服务端启动时会从 `MainSubFile` 指定的 Clash YAML 文件中自动提取 `mixed-port`（或 `port`）和 `secret`，覆盖 `ListenPort` 和 `ServerToken`。此功能适用于需要从订阅源同步端口和 Token 的场景。
 
 ```bash
 # 启动容器（使用当前宿主机用户的 UID:GID，避免权限问题）
