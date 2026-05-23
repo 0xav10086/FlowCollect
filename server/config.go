@@ -28,7 +28,7 @@ type ServerConfig struct {
 var (
 	conf     ServerConfig
 	confLock sync.RWMutex
-	iniPath  = "ServerSetting.ini"
+	iniPath  = "./configs/ServerSetting.ini"
 )
 
 func loadConfig() error {
@@ -87,7 +87,7 @@ func loadConfig() error {
 	conf = ServerConfig{
 		ListenPort:  section.Key("ListenPort").MustString(":8686"),
 		ServerToken: section.Key("ServerToken").MustString("YourSecretToken"),
-		DBPath:      section.Key("DBPath").MustString("traffic.db"),
+		DBPath:      section.Key("DBPath").MustString("./data/traffic.db"),
 		SMTPHost:    smtpSec.Key("SMTPHost").MustString("smtp.qq.com"),
 		SMTPPort:    smtpSec.Key("SMTPPort").MustString("587"),
 		EmailUser:   smtpSec.Key("EmailUser").MustString(""),

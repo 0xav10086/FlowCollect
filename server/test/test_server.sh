@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # FlowCollect 服务端本地测试脚本
 # 用法:
-#   ./test_server.sh                      # 自动从 ../ServerSetting.ini 读取端口
+#   ./test_server.sh                      # 自动从 ../configs/ServerSetting.ini 读取端口
 #   ./test_server.sh http://host:port     # 手动指定地址
 #
 # 前提: 需要 curl；先启动服务端 (cd .. && ./flow_collect_server)
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INI_FILE="${SCRIPT_DIR}/../ServerSetting.ini"
+INI_FILE="${SCRIPT_DIR}/../configs/ServerSetting.ini"
 
 # 从 ServerSetting.ini 读取 ListenPort（格式: ListenPort = :7886）
 if [ -z "${1:-}" ]; then
@@ -36,14 +36,14 @@ check() {
     local expected="$2"
     local actual="$3"
 
-    if echo "$actual" | grep -q "$expected"; then
+    if [[ "$actual" == *"$expected"* ]]; then
         echo "  ✅ PASS: $desc"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         echo "  ❌ FAIL: $desc"
         echo "    期望包含: $expected"
-        echo "    实际响应: $(echo "$actual" | head -5)"
-        ((FAIL++))
+        echo "    实际响应前5行: $(echo "$actual" | head -5)"
+        FAIL=$((FAIL + 1))
     fi
 }
 

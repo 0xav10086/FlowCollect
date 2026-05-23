@@ -12,6 +12,9 @@ import (
 )
 
 func main() {
+	// 0. 确保运行时目录存在
+	ensureDirs()
+
 	// 1. 初始化日志 (同时输出到控制台和文件)
 	setupLogging()
 
@@ -101,8 +104,17 @@ func main() {
 	r.Run(port)
 }
 
+// ensureDirs 启动时自动创建运行时必需目录，防止因目录缺失而 panic
+func ensureDirs() {
+	for _, dir := range []string{"./data", "./logs", "./configs", "./templates"} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Printf("⚠️ 创建目录 %s 失败: %v\n", dir, err)
+		}
+	}
+}
+
 func setupLogging() {
-	logFile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile("./logs/server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("无法创建日志文件:", err)
 		return

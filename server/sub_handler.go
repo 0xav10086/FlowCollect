@@ -213,7 +213,7 @@ func handleSub(c *gin.Context) {
 	log.Printf("[Sub] 收到订阅请求: %s (device=%s)", c.ClientIP(), c.Query("device"))
 
 	// 1. 合并所有节点模板的 proxies 和 proxy-groups
-	proxiesSection, proxyGroupsSection := loadTemplateSections(WebRootDir)
+	proxiesSection, proxyGroupsSection := loadTemplateSections(TemplatesDir)
 
 	// 2. 读取 CSV 规则清单
 	_, orderedTargets := readCSVRules(CSVFile)

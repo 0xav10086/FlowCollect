@@ -17,11 +17,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 配置文件常量（工作区相对路径，部署时与 Go 二进制同级目录）
+// 配置文件常量（模板与规则集存放目录）
 const (
-	WebRootDir = "."
-	RuleDir    = WebRootDir + "/RuleSet"
-	CSVFile    = WebRootDir + "/86_rule_set_collect.csv"
+	TemplatesDir = "./templates"
+	RuleDir      = TemplatesDir + "/RuleSet"
+	CSVFile      = TemplatesDir + "/86_rule_set_collect.csv"
 )
 
 // HandleTriggerUpdate 触发 Go 版本的节点和规则更新，并发送邮件通知 (HTTP Handler)
@@ -60,7 +60,7 @@ func triggerUpdateTask() {
 
 	for fileName, url := range subUrls {
 		logger.Printf("⏳ Fetching nodes for [%s]...", fileName)
-		targetFile := filepath.Join(WebRootDir, fileName)
+		targetFile := filepath.Join(TemplatesDir, fileName)
 		tempFile := targetFile + ".tmp"
 
 		err := downloadFile(url, tempFile, logger)
@@ -185,7 +185,7 @@ func processRules(logger *log.Logger) error {
 		return fmt.Errorf("解析 CSV 失败: %v", err)
 	}
 
-	tempRawFile := filepath.Join(WebRootDir, "raw.tmp")
+	tempRawFile := filepath.Join(TemplatesDir, "raw.tmp")
 	defer os.Remove(tempRawFile) // 确保退出时删除临时文件
 
 	for _, record := range records {
