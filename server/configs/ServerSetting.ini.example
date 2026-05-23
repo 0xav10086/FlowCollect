@@ -1,9 +1,25 @@
 [server]
-ListenPort  = :1234
+; 监听端口（格式 :端口号）
+ListenPort  = :7886
+; API 鉴权 Token
 ServerToken = YourSecretToken
-DBPath      = database.db
-SubUrls     = ["a.yaml"]="https://url",
-              ["b.yaml"]="https://url"
+; SQLite 数据库路径（Docker 模式必须使用容器内绝对路径，如 /app/data/traffic.db）
+DBPath      = ./data/traffic.db
+
+; 订阅源配置（键为本地文件名，值为远程 URL）
+SubUrls     = ["bemly_node.yaml"]="https://example.com/bemly.yaml",
+              ["cf_node.yaml"]="https://example.com/cf.yaml"
+
+; 是否启用客户端特性（预留扩展开关，默认关闭）
+EnableClientFeature = false
+
+; 主订阅文件名（相对于 templates/ 目录，用于 ReadMainSubConfig 动态读取）
+MainSubFile = main_sub.yaml
+
+; 是否从主订阅 YAML 文件中动态读取端口和 Token 并覆盖上方的 ListenPort / ServerToken
+; 读取 Clash YAML 中的 mixed-port（或 port）和 secret 字段
+; 开启后，启动时将自动解析 MainSubFile 并覆盖 INI 中的配置
+ReadMainSubConfig = false
 
 [smtp]
 SMTPHost  = smtp.qq.com

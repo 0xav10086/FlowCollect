@@ -23,6 +23,41 @@ func main() {
 		log.Printf("❌ 初始加载配置文件失败: %v", err)
 		// 这里可以选择退出，或者继续运行等待热更新
 	}
+
+	// 2.1 动态配置覆盖：从主订阅 YAML 文件读取端口和 Token
+	confLock.RLock()
+	readSub := conf.ReadMainSubConfig
+	mainFile := conf.MainSubFile
+	enableClient := conf.EnableClientFeature
+	confLock.RUnlock()
+
+	if readSub {
+		port, token, err := ExtractConfigFromMainSub(mainFile)
+		if err != nil {
+			log.Printf("⚠️ 读取主订阅配置失败，使用 INI 默认值: %v", err)
+		} else {
+			confLock.Lock()
+			if port != "" {
+				conf.ListenPort = ":" + port
+				log.Printf("🔧 端口已从订阅配置覆盖: %s", conf.ListenPort)
+			}
+			if token != "" {
+				conf.ServerToken = token
+				log.Printf("🔧 Token 已从订阅配置覆盖")
+			}
+			confLock.Unlock()
+		}
+	}
+
+	// 2.2 客户端特性开关
+	if enableClient {
+		log.Println("🔧 客户端特性已启用 (EnableClientFeature=true)")
+		go func() {
+			// TODO: 客户端特性预留占位，后续实现具体逻辑
+			log.Println("🔧 客户端特性协程已启动（待实现）")
+		}()
+	}
+
 	go watchConfig()
 
 	// 3. 初始化数据库

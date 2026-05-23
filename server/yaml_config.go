@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 // 配置文件常量（模板与规则集存放目录）
@@ -331,4 +333,61 @@ func processAwkLogic(content, behavior string) []string {
 		}
 	}
 	return result
+}
+
+// ExtractConfigFromMainSub 从 Clash YAML 配置文件中提取监听端口和认证 Token
+// 优先读取 mixed-port，其次 port；Token 读取 secret 字段
+// 返回值：port（不含冒号）、token、error
+func ExtractConfigFromMainSub(filename string) (string, string, error) {
+	filePath := filepath.Join(TemplatesDir, filename)
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", "", fmt.Errorf("读取订阅配置文件失败 %s: %v", filePath, err)
+	}
+
+	// 使用 yaml.Node 进行灵活解析，避免因字段缺失导致整份解析失败
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return "", "", fmt.Errorf("解析 YAML 失败 %s: %v", filePath, err)
+	}
+
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
+		return "", "", fmt.Errorf("YAML 文档为空: %s", filePath)
+	}
+
+	mapping := root.Content[0]
+	if mapping.Kind != yaml.MappingNode {
+		return "", "", fmt.Errorf("YAML 根节点非 Mapping: %s", filePath)
+	}
+
+	// 遍历顶层键值对，提取 mixed-port / port / secret
+	var mixedPort, port, secret string
+	for i := 0; i < len(mapping.Content)-1; i += 2 {
+		keyNode := mapping.Content[i]
+		valNode := mapping.Content[i+1]
+		switch keyNode.Value {
+		case "mixed-port":
+			mixedPort = valNode.Value
+		case "port":
+			port = valNode.Value
+		case "secret":
+			secret = valNode.Value
+		}
+	}
+
+	// 优先 mixed-port，其次 port
+	listenPort := mixedPort
+	if listenPort == "" {
+		listenPort = port
+	}
+
+	// 验证端口有效性
+	if listenPort != "" {
+		if p, err := strconv.Atoi(listenPort); err != nil || p < 1 || p > 65535 {
+			return "", "", fmt.Errorf("无效端口号 %s (来源: %s)", listenPort, filePath)
+		}
+	}
+
+	return listenPort, secret, nil
 }
