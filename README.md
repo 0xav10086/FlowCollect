@@ -213,13 +213,74 @@ CI 自动执行：
 
 ### 1. 服务端部署
 
+#### 方案 A：Docker 容器部署（推荐）
+
+从 GitHub Container Registry 拉取官方镜像并运行：
+
 ```bash
-# 下载最新 Release
+# 在宿主机上准备挂载目录
+mkdir -p /opt/flow_collect/{configs,templates,data,logs}
+
+# 复制配置模板并编辑
+cp server/configs/ServerSetting.ini.example /opt/flow_collect/configs/ServerSetting.ini
+vim /opt/flow_collect/configs/ServerSetting.ini
+
+# 将模板与规则集复制到宿主机
+cp -r server/templates/* /opt/flow_collect/templates/
+
+# 启动容器
+docker run -d \
+  --name flow-collect \
+  --restart unless-stopped \
+  -p 7886:7886 \
+  -e TZ=Asia/Shanghai \
+  -v /opt/flow_collect/configs:/app/configs \
+  -v /opt/flow_collect/templates:/app/templates \
+  -v /opt/flow_collect/data:/app/data \
+  -v /opt/flow_collect/logs:/app/logs \
+  ghcr.io/0xav10086/flow-collect-server:latest
+```
+
+| 宿主机路径 | 容器路径 | 用途 |
+|-----------|----------|------|
+| `/opt/flow_collect/configs` | `/app/configs` | `ServerSetting.ini` 运行时配置 |
+| `/opt/flow_collect/templates` | `/app/templates` | 节点模板 `*.yaml` + 规则集 `RuleSet/` |
+| `/opt/flow_collect/data` | `/app/data` | SQLite 数据库（持久化） |
+| `/opt/flow_collect/logs` | `/app/logs` | 运行日志 |
+
+> **权限提示**：容器默认以 `appuser`（UID 1000）运行。若挂载目录权限不足，请执行 `chown -R 1000:1000 /opt/flow_collect/{data,logs}`。
+
+#### 方案 B：二进制裸机部署
+
+```bash
+# 下载最新 Release 压缩包
 curl -sL https://github.com/0xav10086/FlowCollect/releases/latest/download/flow_collect.tgz -o flow_collect.tgz
 
-# 解压并启动
+# 解压到目标目录
 mkdir -p /opt/flow_collect && tar xzf flow_collect.tgz -C /opt/flow_collect/
+
+# 前台运行
 cd /opt/flow_collect && ./flow_server_linux
+
+# 或使用 systemd 后台运行（推荐）
+sudo tee /etc/systemd/system/flow-collect.service <<'EOF'
+[Unit]
+Description=FlowCollect Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/flow_collect
+ExecStart=/opt/flow_collect/flow_server_linux
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now flow-collect
 ```
 
 ### 2. 客户端配置

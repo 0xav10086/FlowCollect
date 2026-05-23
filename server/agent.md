@@ -86,6 +86,21 @@ server/
 
 **启动时自动创建**：`main.go` 中的 `ensureDirs()` 在任何业务逻辑之前自动创建 `data/`、`logs/`、`configs/`、`templates/` 目录，确保新环境部署不会因目录缺失而 panic。
 
+### 2.1 部署模式
+
+服务端支持 **Docker 镜像** 与 **二进制压缩包** 双轨分发：
+
+| 模式 | 分发方式 | 资源注入方式 | 适用场景 |
+|------|----------|-------------|----------|
+| **Docker** | `ghcr.io/0xav10086/flow-collect-server:latest` | 全部通过 Volume 挂载（`configs/`、`templates/`、`data/`、`logs/`） | 云原生环境、CI/CD 流水线 |
+| **二进制** | Release `.tgz` 压缩包 | 文件直接置于工作目录 | NAS、嵌入式设备、无 Docker 环境 |
+
+**Docker 模式要点**：
+- 镜像内仅包含编译好的二进制（`/app/flow_server`），不含任何源码、配置或数据文件。
+- 四个运行时目录（`configs/`、`templates/`、`data/`、`logs/`）必须从宿主机 Volume 注入。
+- 容器默认以 `appuser`（UID 1000）运行，宿主机挂载目录需确保可读写权限。
+- 时区通过 `-e TZ=Asia/Shanghai` 环境变量注入（镜像已内置 `tzdata`）。
+
 ---
 
 ## 3. 核心路由职责
