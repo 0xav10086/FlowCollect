@@ -1,11 +1,33 @@
 #!/usr/bin/env bash
 # FlowCollect 服务端本地测试脚本
-# 用法: 先启动服务端 (./flow_server_linux)，然后运行本脚本 (./test_server.sh)
-# 前提: 需要 curl 和 jq (jq 可选，用于美化 JSON 输出)
+# 用法:
+#   ./test_server.sh                      # 自动从 ../ServerSetting.ini 读取端口
+#   ./test_server.sh http://host:port     # 手动指定地址
+#
+# 前提: 需要 curl；先启动服务端 (cd .. && ./flow_collect_server)
 
 set -euo pipefail
 
-BASE_URL="${1:-http://localhost:8686}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+INI_FILE="${SCRIPT_DIR}/../ServerSetting.ini"
+
+# 从 ServerSetting.ini 读取 ListenPort（格式: ListenPort = :7886）
+if [ -z "${1:-}" ]; then
+    if [ ! -f "$INI_FILE" ]; then
+        echo "❌ 找不到配置文件: $INI_FILE"
+        exit 1
+    fi
+    PORT=$(grep -E '^\s*ListenPort\s*=' "$INI_FILE" | sed 's/.*=\s*//' | tr -d '[:space:]')
+    if [ -z "$PORT" ]; then
+        echo "❌ 无法从 $INI_FILE 解析 ListenPort"
+        exit 1
+    fi
+    # PORT 形如 ":7886"，构造完整 URL
+    BASE_URL="http://localhost${PORT}"
+else
+    BASE_URL="${1}"
+fi
+
 PASS=0
 FAIL=0
 
@@ -28,6 +50,7 @@ check() {
 echo "=========================================="
 echo " FlowCollect 服务端测试"
 echo " 目标: $BASE_URL"
+echo " 配置: $INI_FILE"
 echo "=========================================="
 echo ""
 
