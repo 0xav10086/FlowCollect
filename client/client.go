@@ -51,11 +51,13 @@ type Config struct {
 // ── 全局变量 ──
 
 var (
-	conf       Config
-	confLock   sync.RWMutex
-	lastStats  = make(map[string]Conn)
-	configPath string
-	reportChan = make(chan ReportData, 100)
+	conf           Config
+	confLock       sync.RWMutex
+	lastStats      = make(map[string]Conn)
+	configPath     string
+	reportChan     = make(chan ReportData, 100)
+	mihomoClient   *http.Client // cached HTTP client for Mihomo API
+	mihomoAPIAddr  string       // resolved Mihomo API base URL
 )
 
 // resolveMihomoAPI 将 Clash 的 external-controller 转换为可用的 HTTP URL
@@ -74,6 +76,53 @@ func resolveMihomoAPI(controller string) string {
 	return "http://" + addr
 }
 
+// resolveMihomoClient 创建一个支持 HTTP + IPC 的 Mihomo API 客户端。
+// 优先尝试 HTTP 连接，失败后回退到 IPC（Windows 命名管道 / Unix Socket）。
+// 创建后缓存结果，避免每 10 秒重复探测。
+func resolveMihomoClient(httpURL string) (*http.Client, string) {
+	if mihomoClient != nil {
+		return mihomoClient, mihomoAPIAddr
+	}
+
+	// 1. 尝试 HTTP
+	if httpURL != "" {
+		client := &http.Client{Timeout: 3 * time.Second}
+		resp, err := client.Get(httpURL + "/version")
+		if err == nil {
+			resp.Body.Close()
+			fmt.Printf("[API] Mihomo HTTP API 可用: %s\n", httpURL)
+			mihomoClient = client
+			mihomoAPIAddr = httpURL
+			return client, httpURL
+		}
+		fmt.Printf("[API] HTTP API 不可用: %v，尝试 IPC...\n", err)
+	}
+
+	// 2. 回退到 IPC
+	ipcPath := knownIPCPath()
+	if ipcPath != "" {
+		transport := newIPCTransport(ipcPath)
+		client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+		// 验证 IPC 连接
+		resp, err := client.Get("http://localhost/version")
+		if err == nil {
+			resp.Body.Close()
+			fmt.Printf("[API] Mihomo IPC 可用: %s\n", ipcPath)
+			mihomoClient = client
+			mihomoAPIAddr = "http://localhost"
+			return client, "http://localhost"
+		}
+		fmt.Printf("[API] IPC 不可用: %v\n", err)
+	}
+
+	// 3. 都不可用，返回 HTTP 客户端（后续请求会报错，但不会崩溃）
+	fmt.Println("[API] 警告: Mihomo API 不可达，等待重试...")
+	client := &http.Client{Timeout: 5 * time.Second}
+	mihomoClient = client
+	mihomoAPIAddr = httpURL
+	return client, httpURL
+}
+
 // loadConfig 从 Clash config.yaml 加载配置
 func loadConfig() error {
 	data, err := os.ReadFile(configPath)
@@ -88,6 +137,10 @@ func loadConfig() error {
 
 	confLock.Lock()
 	defer confLock.Unlock()
+
+	// 配置变更时重置缓存的 Mihomo 客户端，下次请求时重新探测
+	mihomoClient = nil
+	mihomoAPIAddr = ""
 
 	conf = Config{
 		MihomoAPIAddr: resolveMihomoAPI(cc.ExternalController),
@@ -252,8 +305,11 @@ func fetchAndProcess(silent bool) {
 	currConf := conf
 	confLock.RUnlock()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, _ := http.NewRequest("GET", currConf.MihomoAPIAddr+"/connections", nil)
+	// 获取支持 HTTP + IPC 的客户端
+	httpURL := resolveMihomoAPI(currConf.MihomoAPIAddr)
+	client, apiAddr := resolveMihomoClient(httpURL)
+
+	req, _ := http.NewRequest("GET", apiAddr+"/connections", nil)
 	req.Header.Set("Authorization", "Bearer "+currConf.MihomoSecret)
 
 	resp, err := client.Do(req)
@@ -370,6 +426,8 @@ func getWSURL(serverURL string) string {
 	}
 	if strings.HasSuffix(u.Path, "/report") {
 		u.Path = strings.TrimSuffix(u.Path, "/report") + "/ws"
+	} else if u.Path == "" || u.Path == "/" {
+		u.Path = "/ws"
 	}
 	return u.String()
 }
