@@ -331,3 +331,42 @@ func handleSub(c *gin.Context) {
 	c.Data(http.StatusOK, "text/yaml; charset=utf-8", []byte(sb.String()))
 	log.Printf("[Sub] 订阅已下发: %d 个模板, %d 条规则链", proxiesSection != "", ruleCount)
 }
+
+// handleTemplateFile 处理 GET /templates/*filepath 请求，返回 templates 目录下的原始文件。
+// 支持 token 鉴权，用于 proxy-providers / rule-providers 拉取节点模板和规则集。
+// 示例: /templates/shanhuyun_node.yaml?token=xxx, /templates/RuleSet/86JPRules.yaml?token=xxx
+func handleTemplateFile(c *gin.Context) {
+	token := c.Query("token")
+
+	confLock.RLock()
+	expectedToken := conf.ServerToken
+	confLock.RUnlock()
+
+	if token == "" || token != expectedToken {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: invalid or missing token"})
+		return
+	}
+
+	filePath := c.Param("filepath")
+	if filePath == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing filepath"})
+		return
+	}
+
+	// 安全检查：防止路径遍历
+	cleanPath := filepath.Clean(filePath)
+	if strings.Contains(cleanPath, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filepath"})
+		return
+	}
+
+	fullPath := filepath.Join(TemplatesDir, cleanPath)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	c.Data(http.StatusOK, "text/yaml; charset=utf-8", data)
+	log.Printf("[Template] 文件下发: %s -> %s", c.ClientIP(), cleanPath)
+}

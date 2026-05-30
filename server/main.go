@@ -112,8 +112,11 @@ func main() {
 		}
 	}
 
-	// 动态订阅分发路由（无需鉴权，客户端通过 Clash 配置拉取）
+	// 动态订阅分发路由（自带 token 鉴权）
 	r.GET("/sub", handleSub)
+
+	// 模板文件原始分发（自带 token 鉴权，供 proxy-providers / rule-providers 拉取）
+	r.GET("/templates/*filepath", handleTemplateFile)
 
 	// 流量上报接口增加 Token 鉴权中间件
 	r.POST("/report", TokenAuthMiddleware(), handleReport)
