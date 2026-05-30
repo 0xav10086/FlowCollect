@@ -209,7 +209,20 @@ func targetToFile(target string) string {
 }
 
 // handleSub 处理 GET /sub 请求，动态生成并返回 Clash 订阅配置。
+// 需要通过 ?token= 查询参数进行鉴权，token 必须匹配 ServerSetting.ini 中的 ServerToken。
 func handleSub(c *gin.Context) {
+	token := c.Query("token")
+
+	confLock.RLock()
+	expectedToken := conf.ServerToken
+	confLock.RUnlock()
+
+	if token == "" || token != expectedToken {
+		log.Printf("[Sub] 鉴权失败: %s (token=%s)", c.ClientIP(), token)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: invalid or missing token"})
+		return
+	}
+
 	log.Printf("[Sub] 收到订阅请求: %s (device=%s)", c.ClientIP(), c.Query("device"))
 
 	// 1. 合并所有节点模板的 proxies 和 proxy-groups
