@@ -1,9 +1,13 @@
+# FlowCollect 订阅配置模板
+# 复制此文件并重命名为你的私人配置（如 PowerBy0xav10086），填入实际值后上传到 NAS 的 templates/ 目录。
+
 port: 7886
 mixed-port: 7890
 socks-port: 7891
 redir-port: 9797
 tproxy-port: 9898
 external-controller: 0.0.0.0:9091
+secret: 'your-mihomo-api-secret'
 allow-lan: true
 mode: rule
 log-level: warning
@@ -11,8 +15,6 @@ ipv6: false
 tcp-keep-alive: true
 tcp-keep-alive-idle: 600
 tcp-keep-alive-interval: 15
-# tcp-concurrent: true
-# find-process-mode: strict
 
 dns:
   enable: true
@@ -34,7 +36,7 @@ dns:
     - "+.push.apple.com"
     - "+.mask.icloud.com"
     - "+.mask-h2.icloud.com"
-    - "+.fflink.cc"       
+    - "+.fflink.cc"
     - "+.fflinkb02.cc"
     - "+.0xav10086.space"
   default-nameserver:
@@ -81,8 +83,6 @@ tun:
   auto-direct: true
   auto-detect-interface: true
   mtu: 1420
-  #  gso: true
-  #  gso-max-size: 65536
   auto-redirect: true
   route-address:
     - 198.18.0.0/16
@@ -106,7 +106,7 @@ sniffer:
   skip-dst-address:
     [
       91.105.192.0/23,
-      91.108.4.0/22,
+      91.118.4.0/22,
       91.108.8.0/21,
       91.108.16.0/21,
       91.108.56.0/22,
@@ -124,16 +124,18 @@ geox-url:
   asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
 
 proxies:
-   - name: "ua3f-proxy"
-     type: socks5
-     server: 127.0.0.1
-     port: 1080
-     udp: false
+  # 在此添加你的代理节点，或通过 proxy-providers 拉取
+  - name: "example-proxy"
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: false
 
 proxy-providers:
+  # 将 url 改为你的 NAS 地址，token 改为 ServerSetting.ini 中的 ServerToken
   Global-ISP1:
     type: http
-    url: "https://nas.0xav10086.space/templates/flashfox_nodes.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/flashfox_nodes.yaml?token=YourSecretToken"
     interval: 86400
     path: "./Proxy-Providers/flashfox_nodes.yaml"
     health-check:
@@ -142,31 +144,29 @@ proxy-providers:
       url: https://cp.cloudflare.com/generate_204
   Global-ISP2:
     type: http
-    url: "https://nas.0xav10086.space/templates/bemly_node.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/bemly_nodes.yaml?token=YourSecretToken"
     interval: 86400
-    path: "./Proxy-Providers/bemly.yaml"
+    path: "./Proxy-Providers/bemly_nodes.yaml"
     health-check:
       enable: true
       interval: 600
       url: https://cp.cloudflare.com/generate_204
   Global-ISP3:
     type: http
-    url: "https://nas.0xav10086.space/templates/cf_0xav10086.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/cf_0xav10086_nodes.yaml?token=YourSecretToken"
     interval: 86400
-    path: "./Proxy-Providers/cf_0xav10086.yaml"
+    path: "./Proxy-Providers/cf_0xav10086_nodes.yaml"
     health-check:
       enable: true
       interval: 600
       url: https://cp.cloudflare.com/generate_204
 
 proxy-groups:
-
-  # ���������������������������� fox��ISP1��group��url-test������������������������������
   - name: Japan-fox
     type: url-test
     use:
       - Global-ISP1
-    filter: "Japan|JP|"
+    filter: "Japan|JP"
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
@@ -184,7 +184,7 @@ proxy-groups:
     type: url-test
     use:
       - Global-ISP1
-    filter: "US|USA|"
+    filter: "US|USA"
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
@@ -197,7 +197,6 @@ proxy-groups:
     interval: 300
     tolerance: 50
 
-  # ���������������������������� bemly (ISP2)group��select������������������������������
   - name: Japan-bemly
     type: select
     use:
@@ -218,7 +217,6 @@ proxy-groups:
     interval: 300
     tolerance: 50
 
-  # ���������������������������� cf (ISP3)group��select������������������������������
   - name: HK-cf
     type: url-test
     use:
@@ -233,16 +231,14 @@ proxy-groups:
     use: [Global-ISP3]
     url: https://cp.cloudflare.com/generate_204
 
-  # ���������������������������� Japan group��fallback ����������������������������
   - name: Japan
     type: fallback
     proxies:
-      - Japan-fox 
+      - Japan-fox
       - Japan-bemly
     url: https://www.gstatic.com/generate_204
     interval: 300
 
-  # ���������������������������� US group��fallback ����������������������������
   - name: US
     type: fallback
     proxies:
@@ -251,7 +247,6 @@ proxy-groups:
     url: https://www.gstatic.com/generate_204
     interval: 300
 
-  # ���������������������������� HK group��url-test ����������������������������
   - name: HK
     type: fallback
     proxies:
@@ -260,7 +255,6 @@ proxy-groups:
     url: https://www.gstatic.com/generate_204
     interval: 300
 
-  # ���������������������������� �����鱣�ֲ��� ����������������������������
   - name: Switch
     type: url-test
     use: [Global-ISP1, Global-ISP3]
@@ -275,11 +269,10 @@ proxy-groups:
 
   - name: direct
     type: select
-    proxies: [DIRECT, ua3f-proxy]
+    proxies: [DIRECT, example-proxy]
     url: https://cp.cloudflare.com/generate_204
 
 rules:
-
   - DOMAIN-SUFFIX,0xav10086.space,DIRECT,no-resolve
 
   - RULE-SET,86RejectRules,REJECT
@@ -298,52 +291,63 @@ rules:
   - MATCH,DIRECT
 
 rule-providers:
+  # 将 url 改为你的 NAS 地址，token 改为 ServerSetting.ini 中的 ServerToken
   86DirectRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86DirectRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86DirectRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86DirectRules.yaml
     interval: 86400
 
   86RejectRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86RejectRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86RejectRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86RejectRules.yaml
     interval: 86400
 
   86SwitchRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86SwitchRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86SwitchRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86SwitchRules.yaml
     interval: 86400
 
   86JPRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86JPRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86JPRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86JPRules.yaml
     interval: 86400
 
   86HKRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86HKRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86HKRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86HKRules.yaml
     interval: 86400
 
   86USRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86USRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86USRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86USRules.yaml
     interval: 86400
 
   86BemlyRules:
     type: http
     behavior: classical
-    url: "https://nas.0xav10086.space/templates/RuleSet/86BemlyRules.yaml?token=YourSecretToken"
+    url: "https://nas.example.com/templates/RuleSet/86BemlyRules.yaml?token=YourSecretToken"
     path: ./RuleSet/86BemlyRules.yaml
     interval: 86400
+
+# FlowCollect Sidecar 客户端配置
+# remote-server: NAS 后端地址（客户端自动转换 https → wss 并连接 /ws 端点）
+# remote-token: ServerSetting.ini 中的 ServerToken
+# device-id: 设备标识（用于 Dashboard 区分不同设备）
+x-flow-collect:
+  remote-server: "https://nas.example.com"
+  remote-token: "YourSecretToken"
+  device-id: "my-device"
+
 external-ui: ./dashboard

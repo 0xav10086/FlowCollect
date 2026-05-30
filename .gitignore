@@ -42,6 +42,9 @@ setting.ini
 server/*.ini
 client/*.ini
 
+# 私人 Clash 配置（包含 token / uuid 等敏感信息）
+server/templates/PowerBy0xav10086
+
 # 统计数据文件（运行时会重新生成）
 *_traffic_stats.json
 node_traffic_stats.json
