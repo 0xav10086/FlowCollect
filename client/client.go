@@ -78,7 +78,7 @@ func resolveMihomoAPI(controller string) string {
 
 // resolveMihomoClient 创建一个支持 HTTP + IPC 的 Mihomo API 客户端。
 // 优先尝试 HTTP 连接，失败后回退到 IPC（Windows 命名管道 / Unix Socket）。
-// 创建后缓存结果，避免每 10 秒重复探测。
+// 成功后缓存结果；都失败时不缓存，下次调用会重试。
 func resolveMihomoClient(httpURL string) (*http.Client, string) {
 	if mihomoClient != nil {
 		return mihomoClient, mihomoAPIAddr
@@ -103,7 +103,6 @@ func resolveMihomoClient(httpURL string) (*http.Client, string) {
 	if ipcPath != "" {
 		transport := newIPCTransport(ipcPath)
 		client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
-		// 验证 IPC 连接
 		resp, err := client.Get("http://localhost/version")
 		if err == nil {
 			resp.Body.Close()
@@ -115,11 +114,9 @@ func resolveMihomoClient(httpURL string) (*http.Client, string) {
 		fmt.Printf("[API] IPC 不可用: %v\n", err)
 	}
 
-	// 3. 都不可用，返回 HTTP 客户端（后续请求会报错，但不会崩溃）
+	// 3. 都可用，不缓存，下次调用重试
 	fmt.Println("[API] 警告: Mihomo API 不可达，等待重试...")
 	client := &http.Client{Timeout: 5 * time.Second}
-	mihomoClient = client
-	mihomoAPIAddr = httpURL
 	return client, httpURL
 }
 

@@ -114,6 +114,7 @@ func main() {
 		protected.Use(TokenAuthMiddleware())
 		{
 			protected.GET("/stats", handleGetStats)
+			protected.GET("/devices", handleGetDevices)
 			protected.GET("/fake/stats", handleFakeGetStats)
 			// 触发节点更新的接口，为了安全起见必须鉴权
 			protected.POST("/trigger-update", HandleTriggerUpdate)

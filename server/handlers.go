@@ -194,3 +194,10 @@ func handleGetStats(c *gin.Context) {
 		"device_stats": deviceStats,
 	})
 }
+
+// handleGetDevices 返回数据库中所有已知的设备 ID 列表
+func handleGetDevices(c *gin.Context) {
+	var deviceIDs []string
+	db.Model(&TrafficRecord{}).Distinct("device_id").Where("device_id != ?", "").Pluck("device_id", &deviceIDs)
+	c.JSON(http.StatusOK, gin.H{"devices": deviceIDs})
+}
