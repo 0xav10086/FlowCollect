@@ -18,6 +18,11 @@ MainSubFile = main_sub.yaml
 ; 开启后，启动时将自动解析 MainSubFile 并覆盖 INI 中的配置
 ReadMainSubConfig = false
 
+; CF Tunnel 容器名（用于健康监控，每 5 分钟检查一次，掉线自动重启）
+; 需要挂载 Docker Socket: -v /var/run/docker.sock:/var/run/docker.sock
+; 留空则禁用此功能
+CFTunnelContainer = cf_tunnel
+
 [smtp]
 SMTPHost  = smtp.qq.com
 SMTPPort  = 587

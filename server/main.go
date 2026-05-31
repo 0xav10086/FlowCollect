@@ -49,6 +49,7 @@ func main() {
 	}
 
 	go watchConfig()
+	go watchCSV()
 
 	// 3. 初始化数据库
 	initDB()
@@ -67,6 +68,13 @@ func main() {
 		log.Println("⏰ 定时任务触发: 自动更新节点与规则...")
 		// 利用 yaml_config.go 中暴露的内部触发逻辑
 		triggerUpdateTask()
+	})
+	// CF Tunnel 健康监控（每 5 分钟检查一次）
+	_, _ = c.AddFunc("*/5 * * * *", func() {
+		confLock.RLock()
+		container := conf.CFTunnelContainer
+		confLock.RUnlock()
+		CheckAndRestartCFTunnel(container)
 	})
 	c.Start()
 

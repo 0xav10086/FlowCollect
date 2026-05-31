@@ -25,6 +25,7 @@ type ServerConfig struct {
 	SubUrls           map[string]string // 变更为 map，键为 filename，值为 url
 	MainSubFile       string            // 主订阅文件路径（相对于 templates/ 目录）
 	ReadMainSubConfig bool              // 是否从主订阅文件读取端口和 Token 配置
+	CFTunnelContainer string            // CF Tunnel 容器名（用于健康监控，留空则禁用）
 }
 
 var (
@@ -98,6 +99,7 @@ func loadConfig() error {
 		SubUrls:           subUrlsMap,
 		MainSubFile:       section.Key("MainSubFile").MustString("main_sub.yaml"),
 		ReadMainSubConfig: section.Key("ReadMainSubConfig").MustBool(false),
+		CFTunnelContainer: section.Key("CFTunnelContainer").MustString(""),
 	}
 
 	log.Printf("[%s] 服务端配置已更新，加载了 %d 个订阅链接", time.Now().Format("15:04:05"), len(subUrlsMap))

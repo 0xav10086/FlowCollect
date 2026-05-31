@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
@@ -390,4 +391,48 @@ func ExtractConfigFromMainSub(filename string) (string, string, error) {
 	}
 
 	return listenPort, secret, nil
+}
+
+// watchCSV 监听 86_rule_set_collect.csv 文件变化，自动重新编译规则集
+func watchCSV() {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Printf("[CSV] 创建文件监听器失败: %v", err)
+		return
+	}
+	defer watcher.Close()
+
+	if err := watcher.Add(CSVFile); err != nil {
+		log.Printf("[CSV] 监听文件失败 %s: %v", CSVFile, err)
+		return
+	}
+
+	log.Printf("[CSV] 正在监听 %s 的变化...", CSVFile)
+
+	// 防抖：文件可能短时间内多次写入，等待 2 秒后统一处理
+	var debounceTimer *time.Timer
+
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
+				continue
+			}
+			log.Printf("[CSV] 检测到文件变化: %s", event.Name)
+
+			// 防抖处理
+			if debounceTimer != nil {
+				debounceTimer.Stop()
+			}
+			debounceTimer = time.AfterFunc(2*time.Second, func() {
+				log.Println("[CSV] 开始重新编译规则集...")
+				logger := log.Default()
+				processRules(logger)
+				log.Println("[CSV] 规则集重新编译完成")
+			})
+
+		case err := <-watcher.Errors:
+			log.Printf("[CSV] 监听错误: %v", err)
+		}
+	}
 }

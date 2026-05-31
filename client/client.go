@@ -158,6 +158,8 @@ func loadConfig() error {
 		if conf.DeviceID == "" {
 			conf.DeviceID = "android-device"
 		}
+		// 自我修正：将检测到的主机名写回配置文件，避免下次仍为空
+		go writeBackDeviceID(configPath, conf.DeviceID)
 	}
 	if conf.RemoteToken == "" {
 		conf.RemoteToken = "YourSecretToken"
@@ -166,6 +168,40 @@ func loadConfig() error {
 	fmt.Printf("[%s] 配置加载成功 | MihomoAPI: %s | DeviceID: %s | Server: %s\n",
 		time.Now().Format("15:04:05"), conf.MihomoAPIAddr, conf.DeviceID, conf.RemoteServer)
 	return nil
+}
+
+// writeBackDeviceID 将检测到的设备名写回配置文件的 x-flow-collect.device-id 字段
+func writeBackDeviceID(path, deviceID string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	content := string(data)
+	// 查找 "device-id:" 行并替换值
+	lines := strings.Split(content, "\n")
+	modified := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "device-id:") {
+			// 提取缩进
+			indent := line[:len(line)-len(trimmed)]
+			lines[i] = indent + "device-id: \"" + deviceID + "\""
+			modified = true
+			break
+		}
+	}
+
+	if !modified {
+		return
+	}
+
+	output := strings.Join(lines, "\n")
+	if err := os.WriteFile(path, []byte(output), 0644); err != nil {
+		fmt.Printf("[Config] 写回 device-id 失败: %v\n", err)
+		return
+	}
+	fmt.Printf("[Config] 已将 device-id 写回配置文件: %s\n", deviceID)
 }
 
 // watchConfig 监控配置文件变化并热重载
