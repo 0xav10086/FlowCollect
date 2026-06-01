@@ -3,7 +3,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -86,6 +89,20 @@ func loadConfig() error {
 			log.Printf("警告: SubUrls 配置项 '%s' 格式不匹配 [\"filename\"]=\"url\"", part)
 		}
 	}
+
+	// ── 诊断：INI 文件解析详情 ──
+	if absPath, err := filepath.Abs(iniPath); err == nil {
+		log.Printf("[Config] 绝对路径: %s", absPath)
+	}
+	if raw, err := os.ReadFile(iniPath); err == nil {
+		log.Printf("[Config] 文件原始内容:\n%s", string(raw))
+	}
+	serverKeys := section.KeyStrings()
+	log.Printf("[Config] [server] section 包含 %d 个 key: %v", len(serverKeys), serverKeys)
+	tunnelKey := section.Key("CFTunnelContainer")
+	log.Printf("[Config] CFTunnelContainer 原始值: %q", tunnelKey.String())
+	log.Printf("[Config] CFTunnelContainer MustString: %q", tunnelKey.MustString(""))
+	log.Printf("[Config] CFTunnelContainer 是否存在: %v", tunnelKey.Value() != "")
 
 	conf = ServerConfig{
 		ListenPort:        section.Key("ListenPort").MustString(":8686"),
