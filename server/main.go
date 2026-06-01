@@ -71,10 +71,7 @@ func main() {
 	})
 	// CF Tunnel 健康监控（每 5 分钟检查一次）
 	_, _ = c.AddFunc("*/5 * * * *", func() {
-		confLock.RLock()
-		container := conf.CFTunnelContainer
-		confLock.RUnlock()
-		CheckAndRestartCFTunnel(container)
+		CFTunnelHealthCheck()
 	})
 	c.Start()
 
