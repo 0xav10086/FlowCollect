@@ -11,7 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const serverVersion = "v1.0.10"
+const serverVersion = "v1.1.0"
 
 func main() {
 	// 0. 确保运行时目录存在

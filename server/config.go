@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"gopkg.in/ini.v1"
 )
 
 // 配置结构体
@@ -36,90 +36,167 @@ var (
 	iniPath  = "./configs/ServerSetting.ini"
 )
 
+// parseINIValue 去除值两端的引号（单引号或双引号）
+func parseINIValue(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 {
+		if (v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'') {
+			v = v[1 : len(v)-1]
+		}
+	}
+	return v
+}
+
+// loadConfig 从 INI 文件加载配置
 func loadConfig() error {
-	cfg, err := ini.Load(iniPath)
+	f, err := os.Open(iniPath)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
-	confLock.Lock()
-	defer confLock.Unlock()
-
-	section := cfg.Section("server")
-	smtpSec := cfg.Section("smtp")
-
-	// 解析 SubUrls 字段
-	// 期望格式：["bemly_node.yaml"]="https://...", ["cf_node.yaml"]="https://..."
 	subUrlsMap := make(map[string]string)
-	subUrlsStr := section.Key("SubUrls").String()
 
-	// 按逗号分割，注意 URL 内部可能带有逗号，但通常来说 ini 的这种格式逗号在引号外或者不影响外层分割
-	// 为稳妥起见，这里按 "]="" 分割或者简单的字符串处理
-	parts := strings.Split(subUrlsStr, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
+	// 默认值
+	conf = ServerConfig{
+		ListenPort:        ":8686",
+		ServerToken:       "YourSecretToken",
+		DBPath:            "./data/traffic.db",
+		SMTPHost:          "smtp.qq.com",
+		SMTPPort:          "587",
+		SubUrls:           subUrlsMap,
+		MainSubFile:       "main_sub.yaml",
+		ReadMainSubConfig: false,
+		CFTunnelContainer: "",
+	}
+
+	var currentSection string
+	var lastKey string
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		// 跳过空行和注释
+		if trimmed == "" || trimmed[0] == ';' || trimmed[0] == '#' {
 			continue
 		}
 
-		// 寻找 [" 和 "]="
-		startIdx := strings.Index(part, "[\"")
-		if startIdx == -1 {
-			startIdx = strings.Index(part, "[") // 容错：没有引号
+		// 检测 section
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			currentSection = strings.ToLower(trimmed[1 : len(trimmed)-1])
+			continue
 		}
 
-		equalIdx := strings.Index(part, "=")
-		if startIdx != -1 && equalIdx != -1 && startIdx < equalIdx {
-			// 提取文件名
-			fileNamePart := part[startIdx+1 : equalIdx]
-			fileNamePart = strings.TrimSpace(fileNamePart)
-			fileNamePart = strings.TrimSuffix(fileNamePart, "]")
-			fileNamePart = strings.Trim(fileNamePart, `"'`) // 去除内部引号
-
-			// 提取 URL
-			urlPart := part[equalIdx+1:]
-			urlPart = strings.TrimSpace(urlPart)
-			urlPart = strings.Trim(urlPart, `"'`) // 去除引号
-
-			if fileNamePart != "" && urlPart != "" {
-				subUrlsMap[fileNamePart] = urlPart
+		// 续行：以空格开头的行，追加到上一个 key 的值
+		if line[0] == ' ' || line[0] == '\t' {
+			if lastKey != "" {
+				switch currentSection {
+				case "server":
+					switch lastKey {
+					case "suburls":
+						// SubUrls 续行：解析 ["name"]="url" 格式
+						parseSubURL(trimmed, subUrlsMap)
+					}
+				}
 			}
-		} else {
-			log.Printf("警告: SubUrls 配置项 '%s' 格式不匹配 [\"filename\"]=\"url\"", part)
+			continue
+		}
+
+		// 解析 key = value
+		if idx := strings.Index(trimmed, "="); idx > 0 {
+			key := strings.TrimSpace(trimmed[:idx])
+			val := parseINIValue(trimmed[idx+1:])
+
+			// 只有第一次遇到 SubUrls 时才解析首行
+			if strings.EqualFold(key, "suburls") {
+				lastKey = "suburls"
+				parseSubURL(val, subUrlsMap)
+				continue
+			} else {
+				lastKey = ""
+			}
+
+			// 根据当前 section 和 key 设置值
+			lowerKey := strings.ToLower(key)
+			switch currentSection {
+			case "server":
+				switch lowerKey {
+				case "listenport":
+					conf.ListenPort = val
+				case "servertoken":
+					conf.ServerToken = val
+				case "dbpath":
+					conf.DBPath = val
+				case "mainsubfile":
+					conf.MainSubFile = val
+				case "readmainsubconfig":
+					conf.ReadMainSubConfig = val == "true" || val == "1" || val == "yes"
+				case "cftunnelcontainer":
+					conf.CFTunnelContainer = val
+				}
+			case "smtp":
+				switch lowerKey {
+				case "smtphost":
+					conf.SMTPHost = val
+				case "smtpport":
+					conf.SMTPPort = val
+				case "emailuser":
+					conf.EmailUser = val
+				case "emailpass":
+					conf.EmailPass = val
+				case "emailto":
+					conf.EmailTo = val
+				}
+			}
 		}
 	}
 
-	// ── 诊断：INI 文件解析详情 ──
-	if absPath, err := filepath.Abs(iniPath); err == nil {
-		log.Printf("[Config] 绝对路径: %s", absPath)
-	}
-	if raw, err := os.ReadFile(iniPath); err == nil {
-		log.Printf("[Config] 文件原始内容:\n%s", string(raw))
-	}
-	serverKeys := section.KeyStrings()
-	log.Printf("[Config] [server] section 包含 %d 个 key: %v", len(serverKeys), serverKeys)
-	tunnelKey := section.Key("CFTunnelContainer")
-	log.Printf("[Config] CFTunnelContainer 原始值: %q", tunnelKey.String())
-	log.Printf("[Config] CFTunnelContainer MustString: %q", tunnelKey.MustString(""))
-	log.Printf("[Config] CFTunnelContainer 是否存在: %v", tunnelKey.Value() != "")
-
-	conf = ServerConfig{
-		ListenPort:        section.Key("ListenPort").MustString(":8686"),
-		ServerToken:       section.Key("ServerToken").MustString("YourSecretToken"),
-		DBPath:            section.Key("DBPath").MustString("./data/traffic.db"),
-		SMTPHost:          smtpSec.Key("SMTPHost").MustString("smtp.qq.com"),
-		SMTPPort:          smtpSec.Key("SMTPPort").MustString("587"),
-		EmailUser:         smtpSec.Key("EmailUser").MustString(""),
-		EmailPass:         smtpSec.Key("EmailPass").MustString(""),
-		EmailTo:           smtpSec.Key("EmailTo").MustString(""),
-		SubUrls:           subUrlsMap,
-		MainSubFile:       section.Key("MainSubFile").MustString("main_sub.yaml"),
-		ReadMainSubConfig: section.Key("ReadMainSubConfig").MustBool(false),
-		CFTunnelContainer: section.Key("CFTunnelContainer").MustString(""),
+	if err := scanner.Err(); err != nil {
+		return err
 	}
 
 	log.Printf("[%s] 服务端配置已更新，加载了 %d 个订阅链接", time.Now().Format("15:04:05"), len(subUrlsMap))
 	return nil
+}
+
+// parseSubURL 解析单个 SubUrls 条目
+// 输入格式: ["filename"]="url" 或 ["filename"]=url
+func parseSubURL(val string, subUrlsMap map[string]string) {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return
+	}
+
+	// 寻找 [" 和 "]="
+	startIdx := strings.Index(val, "[\"")
+	if startIdx == -1 {
+		startIdx = strings.Index(val, "[")
+		if startIdx == -1 {
+			return
+		}
+	}
+
+	equalIdx := strings.Index(val, "=")
+	if equalIdx == -1 || equalIdx <= startIdx {
+		return
+	}
+
+	// 提取文件名
+	fileNamePart := val[startIdx+1 : equalIdx]
+	fileNamePart = strings.TrimSpace(fileNamePart)
+	fileNamePart = strings.TrimSuffix(fileNamePart, "]")
+	fileNamePart = strings.Trim(fileNamePart, `"'`)
+
+	// 提取 URL
+	urlPart := val[equalIdx+1:]
+	urlPart = strings.TrimSpace(urlPart)
+	urlPart = strings.Trim(urlPart, `"'`)
+
+	if fileNamePart != "" && urlPart != "" {
+		subUrlsMap[fileNamePart] = urlPart
+	}
 }
 
 func watchConfig() {
@@ -135,6 +212,11 @@ func watchConfig() {
 		return
 	}
 	log.Printf("[Config] 正在监听 INI 文件: %s", iniPath)
+
+	// 打印绝对路径
+	if absPath, err := filepath.Abs(iniPath); err == nil {
+		log.Printf("[Config] 绝对路径: %s", absPath)
+	}
 
 	for {
 		select {
