@@ -47,51 +47,21 @@ func dockerRestartContainer(name string) error {
 	return nil
 }
 
-// CheckAndRestartCFTunnel 检查 CF Tunnel 连通性，连续失败 3 次则重启容器
-func CheckAndRestartCFTunnel(checkURL, containerName string) {
-	if checkURL == "" || containerName == "" {
-		return
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(checkURL)
-
-	cfTunnelFailLock.Lock()
-	defer cfTunnelFailLock.Unlock()
-
+// checkURLReachable 检查 URL 是否可达，返回 (statusCode, error)
+func checkURLReachable(url string, timeout time.Duration) (int, error) {
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(url)
 	if err != nil {
-		cfTunnelFailCount++
-		log.Printf("[CF Tunnel] 连通性检查失败 (%d/3): %v", cfTunnelFailCount, err)
-	} else {
-		resp.Body.Close()
-		if resp.StatusCode >= 500 {
-			cfTunnelFailCount++
-			log.Printf("[CF Tunnel] 服务端错误 (%d/3): HTTP %d", cfTunnelFailCount, resp.StatusCode)
-		} else {
-			if cfTunnelFailCount > 0 {
-				log.Printf("[CF Tunnel] 连通恢复正常，重置失败计数")
-			}
-			cfTunnelFailCount = 0
-			return
-		}
+		return 0, err
 	}
-
-	if cfTunnelFailCount < 3 {
-		return
-	}
-
-	log.Printf("[CF Tunnel] 连续失败 %d 次，正在重启容器 %s...", cfTunnelFailCount, containerName)
-	cfTunnelFailCount = 0
-
-	if err := dockerRestartContainer(containerName); err != nil {
-		log.Printf("[CF Tunnel] 重启失败: %v", err)
-		return
-	}
-	log.Printf("[CF Tunnel] 容器 %s 已重启", containerName)
+	defer resp.Body.Close()
+	return resp.StatusCode, nil
 }
 
-// CFTunnelHealthCheck 执行 CF Tunnel 健康检查（供 cron 调用）
+// CFTunnelHealthCheck 执行 CF Tunnel 健康检查（供 cron 和启动时调用）
 func CFTunnelHealthCheck() {
+	log.Println("[CF Tunnel] 开始健康检查...")
+
 	confLock.RLock()
 	container := conf.CFTunnelContainer
 	token := conf.ServerToken
@@ -99,10 +69,53 @@ func CFTunnelHealthCheck() {
 	confLock.RUnlock()
 
 	if container == "" {
+		log.Println("[CF Tunnel] 容器名未配置 (CFTunnelContainer 为空)，跳过检查")
 		return
 	}
 
-	// 用本地端口做基本健康检查
-	checkURL := fmt.Sprintf("http://127.0.0.1%s/sub?token=%s", listenPort, token)
-	CheckAndRestartCFTunnel(checkURL, container)
+	log.Printf("[CF Tunnel] 目标容器: %s", container)
+
+	// 检查 1: 外部 CF Tunnel URL
+	externalURL := fmt.Sprintf("https://nas.0xav10086.space/sub?token=%s", token)
+	extStatus, extErr := checkURLReachable(externalURL, 10*time.Second)
+	if extErr != nil {
+		log.Printf("[CF Tunnel] 外部 URL 不可达 (%s): %v", externalURL, extErr)
+	} else {
+		log.Printf("[CF Tunnel] 外部 URL 正常: HTTP %d", extStatus)
+	}
+
+	// 检查 2: 本地端口
+	localURL := fmt.Sprintf("http://127.0.0.1%s/sub?token=%s", listenPort, token)
+	localStatus, localErr := checkURLReachable(localURL, 5*time.Second)
+	if localErr != nil {
+		log.Printf("[CF Tunnel] 本地端口不可达 (%s): %v", localURL, localErr)
+	} else {
+		log.Printf("[CF Tunnel] 本地端口正常: HTTP %d", localStatus)
+	}
+
+	// 综合判断
+	cfTunnelFailLock.Lock()
+	defer cfTunnelFailLock.Unlock()
+
+	if extErr != nil || localErr != nil || extStatus >= 500 || localStatus >= 500 {
+		cfTunnelFailCount++
+		log.Printf("[CF Tunnel] 检查异常 (%d/3)", cfTunnelFailCount)
+	} else {
+		if cfTunnelFailCount > 0 {
+			log.Printf("[CF Tunnel] 所有检查通过，重置失败计数")
+		}
+		cfTunnelFailCount = 0
+		return
+	}
+
+	// 连续失败 3 次，执行重启
+	if cfTunnelFailCount >= 3 {
+		log.Printf("[CF Tunnel] 连续失败 %d 次，正在重启容器 %s...", cfTunnelFailCount, container)
+		cfTunnelFailCount = 0
+		if err := dockerRestartContainer(container); err != nil {
+			log.Printf("[CF Tunnel] 重启失败: %v", err)
+		} else {
+			log.Printf("[CF Tunnel] 容器 %s 已重启", container)
+		}
+	}
 }

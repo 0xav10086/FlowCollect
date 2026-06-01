@@ -107,13 +107,24 @@ func loadConfig() error {
 }
 
 func watchConfig() {
-	watcher, _ := fsnotify.NewWatcher()
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Printf("[Config] 创建文件监听器失败: %v", err)
+		return
+	}
 	defer watcher.Close()
-	_ = watcher.Add(iniPath)
+
+	if err := watcher.Add(iniPath); err != nil {
+		log.Printf("[Config] 监听文件失败 %s: %v", iniPath, err)
+		return
+	}
+	log.Printf("[Config] 正在监听 INI 文件: %s", iniPath)
+
 	for {
 		select {
 		case event := <-watcher.Events:
 			if event.Op&fsnotify.Write == fsnotify.Write {
+				log.Printf("[Config] 检测到 INI 文件变化: %s", event.Name)
 				loadConfig()
 			}
 		}
