@@ -65,7 +65,7 @@ var (
 // 转换后: "http://127.0.0.1:9090"
 func resolveMihomoAPI(controller string) string {
 	if controller == "" {
-		return "http://127.0.0.1:9090"
+		return "http://127.0.0.1:9097"
 	}
 	// 如果已经包含协议前缀，直接返回
 	if strings.HasPrefix(controller, "http://") || strings.HasPrefix(controller, "https://") {

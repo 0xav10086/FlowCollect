@@ -103,6 +103,32 @@ server/
 - 容器默认以 `appuser`（UID 1000）运行，宿主机挂载目录需确保可读写权限。
 - 时区通过 `-e TZ=Asia/Shanghai` 环境变量注入（镜像已内置 `tzdata`）。
 
+### 2.2 发布流程
+
+服务端通过 GitHub Actions CI 构建并推送 Docker 镜像，**不需要本地 `go build`**。
+
+**触发方式**：推送 tag `v*`（如 `v1.1.0`）到 GitHub 仓库，自动触发 CI。
+
+**CI 流程**：
+1. 编译服务端 Linux 二进制 + 构建前端静态资源 → 打包 `flow_collect.tgz`
+2. 编译全平台 Sidecar 客户端二进制
+3. 创建 GitHub Release 并上传所有构建产物
+4. 构建 Docker 镜像并推送到 GHCR
+
+**镜像地址**：`ghcr.io/0xav10086/flow-collect-server:{version}`
+
+**等待时间**：推送 tag 后，sleep 140 秒等待 CI 完成。
+
+**NAS 部署命令**（单行，不要使用 `\` 换行）：
+```bash
+docker pull ghcr.io/0xav10086/flow-collect-server:v1.1.0 && docker stop flow_server && docker rm flow_server && docker run -d --name flow_server --user root --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock -v /volume1/docker/flow_collect/configs:/app/configs -v /volume1/docker/flow_collect/templates:/app/templates -v /volume1/docker/flow_collect/data:/app/data -v /volume1/docker/flow_collect/logs:/app/logs -p 7886:7886 -e TZ=Asia/Shanghai ghcr.io/0xav10086/flow-collect-server:v1.1.0
+```
+
+注意：
+- `{version}` 替换为实际的 tag 名（如 `v1.1.0`）
+- `--user root` + `-v /var/run/docker.sock:/var/run/docker.sock` 用于 CF Tunnel 容器重启
+- NAS 路径 `/volume1/docker/flow_collect/` 下需提前准备好 `configs/`、`templates/`、`data/`、`logs/` 目录
+
 ---
 
 ## 3. 核心路由职责

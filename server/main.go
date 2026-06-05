@@ -5,13 +5,15 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
 )
 
-const serverVersion = "v1.1.0"
+const serverVersion = "v1.1.1"
 
 func main() {
 	// 0. 确保运行时目录存在
@@ -76,6 +78,9 @@ func main() {
 		log.Println("  SMTP 邮件: 未配置")
 	}
 	log.Println("========================================")
+
+	// CSV 启动诊断
+	logCSVDiagnostics()
 
 	go watchConfig()
 	go watchCSV()
@@ -222,4 +227,46 @@ func cleanupOldData(days int) {
 	} else {
 		log.Printf("已清理 %d 天前的数据，共删除 %d 条记录", days, result.RowsAffected)
 	}
+}
+
+// logCSVDiagnostics 输出 CSV 文件和 RuleSet 目录的诊断信息（启动时调用）
+func logCSVDiagnostics() {
+	log.Println("-------- CSV 诊断 --------")
+
+	// CSV 文件信息
+	csvInfo, err := os.Stat(CSVFile)
+	if err != nil {
+		log.Printf("[CSV 诊断] CSV 文件不存在或无法访问: %v", err)
+	} else {
+		data, _ := os.ReadFile(CSVFile)
+		lines := strings.Split(string(data), "\n")
+		validCount := 0
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				validCount++
+			}
+		}
+		log.Printf("[CSV 诊断] CSV 文件: %d bytes, 最后修改: %s, 有效规则数: %d",
+			csvInfo.Size(), csvInfo.ModTime().Format("2006-01-02 15:04:05"), validCount)
+	}
+
+	// RuleSet 目录文件列表
+	files, err := filepath.Glob(filepath.Join(RuleDir, "86*.yaml"))
+	if err != nil {
+		log.Printf("[CSV 诊断] RuleSet 目录无法读取: %v", err)
+		log.Println("--------------------------")
+		return
+	}
+	log.Printf("[CSV 诊断] RuleSet 文件 (%d 个):", len(files))
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			log.Printf("[CSV 诊断]   %s — 无法获取信息", filepath.Base(f))
+			continue
+		}
+		log.Printf("[CSV 诊断]   %s — %d bytes, 修改于 %s",
+			info.Name(), info.Size(), info.ModTime().Format("2006-01-02 15:04"))
+	}
+	log.Println("--------------------------")
 }
