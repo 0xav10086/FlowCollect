@@ -135,7 +135,7 @@ server/
 
 **NAS 部署命令**（单行，不要使用 `\` 换行）：
 ```bash
-sudo docker pull ghcr.io/0xav10086/flow-collect-server:v1.1.2 && sudo docker stop flow-collect && sudo docker rm flow-collect && sudo docker run -d --name flow-collect --user root --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock -v /volume1/docker/flow_collect/configs:/app/configs -v /volume1/docker/flow_collect/templates:/app/templates -v /volume1/docker/flow_collect/data:/app/data -v /volume1/docker/flow_collect/logs:/app/logs -p 7886:7886 -e TZ=Asia/Shanghai ghcr.io/0xav10086/flow-collect-server:v1.1.2
+sudo docker pull ghcr.io/0xav10086/flow-collect-server:v1.1.3 && sudo docker stop flow-collect && sudo docker rm flow-collect && sudo docker run -d --name flow-collect --user root --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock -v /volume1/docker/flow_collect/configs:/app/configs -v /volume1/docker/flow_collect/templates:/app/templates -v /volume1/docker/flow_collect/data:/app/data -v /volume1/docker/flow_collect/logs:/app/logs -p 7886:7886 -e TZ=Asia/Shanghai ghcr.io/0xav10086/flow-collect-server:v1.1.3
 ```
 
 注意：

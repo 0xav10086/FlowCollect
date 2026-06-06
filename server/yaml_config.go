@@ -193,6 +193,14 @@ func processRules(logger *log.Logger) error {
 	tempRawFile := filepath.Join(TemplatesDir, "raw.tmp")
 	defer os.Remove(tempRawFile) // 确保退出时删除临时文件
 
+	// 统计变量
+	totalProcessed := 0
+	totalSkipped := 0
+	totalDownloadFailed := 0
+	totalReadFailed := 0
+	totalRules := 0
+	totalEntries := 0
+
 	for _, record := range records {
 		if len(record) < 5 {
 			continue
@@ -206,33 +214,39 @@ func processRules(logger *log.Logger) error {
 		if name == "" || strings.HasPrefix(name, "#") {
 			continue
 		}
+		totalEntries++
 
 		targetFile := filepath.Join(RuleDir, getTargetFile(target))
 		if getTargetFile(target) == "" {
-			logger.Printf("⚠️  [Warn] Invalid target '%s' for %s", target, name)
+			logger.Printf("  ⚠️  跳过 %s: 未知 target '%s'", name, target)
+			totalSkipped++
 			continue
 		}
 		if _, err := os.Stat(targetFile); os.IsNotExist(err) {
-			logger.Printf("⚠️  [Warn] Target file for policy group %s not found (%s), skipping %s", target, targetFile, name)
+			logger.Printf("  ⚠️  跳过 %s: 目标文件 %s 不存在", name, targetFile)
+			totalSkipped++
 			continue
 		}
 
-		logger.Printf("  -> Fetching and compiling: %s (-> %s)", name, target)
+		logger.Printf("  -> %s (target=%s, behavior=%s)", name, target, behavior)
 
 		// 1. 先下载
 		err := downloadFile(url, tempRawFile, logger)
 		if err != nil {
-			logger.Printf("    ❌ 下载规则失败: %v", err)
+			logger.Printf("    ❌ 下载失败: %v", err)
+			totalDownloadFailed++
 			continue
 		}
 
 		// 2. 再处理
 		rawContent, err := os.ReadFile(tempRawFile)
 		if err != nil {
-			logger.Printf("    ❌ 读取规则失败: %v", err)
+			logger.Printf("    ❌ 读取失败: %v", err)
+			totalReadFailed++
 			continue
 		}
 		processedLines := processAwkLogic(string(rawContent), behavior)
+		logger.Printf("    ✅ %d 条规则", len(processedLines))
 
 		// 3. 下载+处理都成功，才写入文件
 		appendToFile(targetFile, fmt.Sprintf("  # === [AUTO: %s] ===\n", name))
@@ -241,7 +255,23 @@ func processRules(logger *log.Logger) error {
 		}
 		appendToFile(targetFile, "  # =====================\n\n")
 
+		totalRules += len(processedLines)
+		totalProcessed++
 	}
+
+	// 输出汇总
+	logger.Printf("-------- CSV 编译统计 (共 %d 条) --------", totalEntries)
+	logger.Printf("  成功: %d | 规则: %d 条", totalProcessed, totalRules)
+	if totalSkipped > 0 {
+		logger.Printf("  跳过: %d (未知 target 或目标文件不存在)", totalSkipped)
+	}
+	if totalDownloadFailed > 0 {
+		logger.Printf("  下载失败: %d", totalDownloadFailed)
+	}
+	if totalReadFailed > 0 {
+		logger.Printf("  读取失败: %d", totalReadFailed)
+	}
+	logger.Printf("------------------------------------------")
 
 	return nil
 }

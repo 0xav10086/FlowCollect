@@ -13,7 +13,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const serverVersion = "v1.1.2"
+const serverVersion = "v1.1.3"
 
 func main() {
 	// 0. 确保运行时目录存在
@@ -119,6 +119,16 @@ func main() {
 
 	// 5. 启动时立即更新一次订阅数据
 	go updateSubscriptionData()
+
+	// 5.1 启动时立即编译一次规则集（与 CSV 对齐）
+	go func() {
+		logger := log.Default()
+		if err := processRules(logger); err != nil {
+			log.Printf("[CSV] 启动时规则编译失败: %v", err)
+		} else {
+			log.Println("[CSV] 启动时规则编译完成")
+		}
+	}()
 
 	// 6. 启动 Web 服务
 	r := gin.Default()
