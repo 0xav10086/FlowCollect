@@ -144,6 +144,8 @@ func getTargetFile(target string) string {
 	switch target {
 	case "Japan":
 		return "86JPRules.yaml"
+	case "JP":
+		return "86JPRules.yaml"
 	case "HK":
 		return "86HKRules.yaml"
 	case "US":
@@ -217,31 +219,28 @@ func processRules(logger *log.Logger) error {
 
 		logger.Printf("  -> Fetching and compiling: %s (-> %s)", name, target)
 
-		// Append header
-		appendToFile(targetFile, fmt.Sprintf("  # === [AUTO: %s] ===\n", name))
-
-		// Download to temp file
+		// 1. 先下载
 		err := downloadFile(url, tempRawFile, logger)
 		if err != nil {
 			logger.Printf("    ❌ 下载规则失败: %v", err)
 			continue
 		}
 
-		// Read and process downloaded rules
+		// 2. 再处理
 		rawContent, err := os.ReadFile(tempRawFile)
 		if err != nil {
 			logger.Printf("    ❌ 读取规则失败: %v", err)
 			continue
 		}
-
-		// Process lines based on behavior
 		processedLines := processAwkLogic(string(rawContent), behavior)
+
+		// 3. 下载+处理都成功，才写入文件
+		appendToFile(targetFile, fmt.Sprintf("  # === [AUTO: %s] ===\n", name))
 		for _, line := range processedLines {
 			appendToFile(targetFile, line+"\n")
 		}
-
-		// Append footer
 		appendToFile(targetFile, "  # =====================\n\n")
+
 	}
 
 	return nil

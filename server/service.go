@@ -108,8 +108,8 @@ func processDailyReport() {
 	today := time.Now().Truncate(24 * time.Hour)
 
 	var proxyTotal, localTotal int64
-	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("SUM(up_delta + down_delta)").Scan(&proxyTotal)
-	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("SUM(up_delta + down_delta)").Scan(&localTotal)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, true).Select("COALESCE(SUM(up_delta + down_delta), 0)").Scan(&proxyTotal)
+	db.Model(&TrafficRecord{}).Where("timestamp >= ? AND is_proxy = ?", today, false).Select("COALESCE(SUM(up_delta + down_delta), 0)").Scan(&localTotal)
 
 	confLock.RLock()
 	subUrls := conf.SubUrls
