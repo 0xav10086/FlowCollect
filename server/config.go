@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,8 @@ type ServerConfig struct {
 	MainSubFile       string            // 主订阅文件路径（相对于 templates/ 目录）
 	ReadMainSubConfig bool              // 是否从主订阅文件读取端口和 Token 配置
 	CFTunnelContainer string            // CF Tunnel 容器名（用于健康监控，留空则禁用）
+	SubUrlsUpdateTime int               // SubUrls 更新间隔（秒），默认 604800（7 天）
+	RuleSetUpdateTime int               // RuleSet 更新间隔（秒），默认 604800（7 天）
 }
 
 var (
@@ -68,6 +71,8 @@ func loadConfig() error {
 		MainSubFile:       "main_sub.yaml",
 		ReadMainSubConfig: false,
 		CFTunnelContainer: "",
+		SubUrlsUpdateTime: 604800,
+		RuleSetUpdateTime: 604800,
 	}
 
 	var currentSection string
@@ -135,6 +140,14 @@ func loadConfig() error {
 					conf.ReadMainSubConfig = val == "true" || val == "1" || val == "yes"
 				case "cftunnelcontainer":
 					conf.CFTunnelContainer = val
+				case "suburls_update_time":
+					if v, err := strconv.Atoi(val); err == nil && v > 0 {
+						conf.SubUrlsUpdateTime = v
+					}
+				case "ruleset_update_time":
+					if v, err := strconv.Atoi(val); err == nil && v > 0 {
+						conf.RuleSetUpdateTime = v
+					}
 				}
 			case "smtp":
 				switch lowerKey {

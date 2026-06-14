@@ -13,7 +13,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const serverVersion = "v1.1.3"
+const serverVersion = "v1.1.4"
 
 func main() {
 	// 0. 确保运行时目录存在
@@ -58,6 +58,8 @@ func main() {
 	cfgCFTunnel := conf.CFTunnelContainer
 	cfgSubUrls := len(conf.SubUrls)
 	cfgSMTP := conf.SMTPHost != "" && conf.EmailTo != ""
+	cfgSubUrlsInterval := conf.SubUrlsUpdateTime
+	cfgRuleSetInterval := conf.RuleSetUpdateTime
 	confLock.RUnlock()
 
 	log.Println("========================================")
@@ -72,6 +74,8 @@ func main() {
 	log.Printf("  CSV 文件监听: 启用 (%s)", CSVFile)
 	log.Printf("  INI 文件监听: 启用 (%s)", iniPath)
 	log.Printf("  订阅源数量: %d", cfgSubUrls)
+	log.Printf("  SubUrls 更新间隔: %d 秒 (%.1f 天)", cfgSubUrlsInterval, float64(cfgSubUrlsInterval)/86400)
+	log.Printf("  RuleSet 更新间隔: %d 秒 (%.1f 天)", cfgRuleSetInterval, float64(cfgRuleSetInterval)/86400)
 	if cfgSMTP {
 		log.Println("  SMTP 邮件: 启用")
 	} else {
@@ -97,12 +101,6 @@ func main() {
 	_, _ = c.AddFunc("0 3 * * *", func() {
 		cleanupOldData(30)
 	})
-	// 添加定时执行自动更新节点与规则的脚本任务（每天凌晨 4:00 执行一次）
-	_, _ = c.AddFunc("0 4 * * *", func() {
-		log.Println("⏰ 定时任务触发: 自动更新节点与规则...")
-		// 利用 yaml_config.go 中暴露的内部触发逻辑
-		triggerUpdateTask()
-	})
 	// CF Tunnel 健康监控（每 5 分钟检查一次）
 	_, err := c.AddFunc("*/5 * * * *", func() {
 		CFTunnelHealthCheck()
@@ -117,16 +115,42 @@ func main() {
 	// 启动时立即执行一次 CF Tunnel 健康检查
 	go CFTunnelHealthCheck()
 
-	// 5. 启动时立即更新一次订阅数据
+	// 5. 启动时立即更新一次订阅数据（流量元数据）
 	go updateSubscriptionData()
 
-	// 5.1 启动时立即编译一次规则集（与 CSV 对齐）
+	// 5.1 SubUrls 定时更新（启动时立即执行一次，之后按配置间隔循环）
 	go func() {
-		logger := log.Default()
-		if err := processRules(logger); err != nil {
-			log.Printf("[CSV] 启动时规则编译失败: %v", err)
-		} else {
-			log.Println("[CSV] 启动时规则编译完成")
+		updateSubUrls()
+		confLock.RLock()
+		interval := time.Duration(conf.SubUrlsUpdateTime) * time.Second
+		confLock.RUnlock()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			confLock.RLock()
+			interval = time.Duration(conf.SubUrlsUpdateTime) * time.Second
+			confLock.RUnlock()
+			ticker.Reset(interval)
+			log.Println("⏰ 定时任务触发: 更新订阅节点...")
+			updateSubUrls()
+		}
+	}()
+
+	// 5.2 RuleSet 定时更新（启动时立即执行一次，之后按配置间隔循环）
+	go func() {
+		updateRuleSets()
+		confLock.RLock()
+		interval := time.Duration(conf.RuleSetUpdateTime) * time.Second
+		confLock.RUnlock()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			confLock.RLock()
+			interval = time.Duration(conf.RuleSetUpdateTime) * time.Second
+			confLock.RUnlock()
+			ticker.Reset(interval)
+			log.Println("⏰ 定时任务触发: 编译规则集...")
+			updateRuleSets()
 		}
 	}()
 

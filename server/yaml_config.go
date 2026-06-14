@@ -36,7 +36,51 @@ func HandleTriggerUpdate(c *gin.Context) {
 	})
 }
 
-// triggerUpdateTask 是真正的执行函数，供 HTTP handler 和 cron 定时任务复用
+// updateSubUrls 下载订阅节点文件（原 triggerUpdateTask Phase 1）
+func updateSubUrls() {
+	logger := log.Default()
+	logger.Println("--> Updating subscriptions...")
+
+	if err := os.MkdirAll(RuleDir, 0755); err != nil {
+		logger.Printf("❌ 无法创建目录 %s: %v\n", RuleDir, err)
+	}
+
+	confLock.RLock()
+	subUrls := conf.SubUrls
+	confLock.RUnlock()
+
+	for fileName, url := range subUrls {
+		logger.Printf("⏳ Fetching nodes for [%s]...", fileName)
+		targetFile := filepath.Join(TemplatesDir, fileName)
+		tempFile := targetFile + ".tmp"
+
+		err := downloadFile(url, tempFile, logger)
+		if err != nil {
+			logger.Printf("❌ Failed to update [%s]: %v. Retaining old file.", fileName, err)
+			os.Remove(tempFile)
+		} else {
+			if err := os.Rename(tempFile, targetFile); err != nil {
+				logger.Printf("❌ 覆盖文件失败 [%s]: %v", fileName, err)
+			} else {
+				logger.Printf("✅ Successfully updated [%s].", fileName)
+			}
+		}
+	}
+}
+
+// updateRuleSets 编译规则集（原 triggerUpdateTask Phase 2）
+func updateRuleSets() {
+	logger := log.Default()
+	logger.Println("--> Compiling cloud rule sets...")
+	if err := processRules(logger); err != nil {
+		logger.Printf("❌ RuleSet compilation failed: %v\n", err)
+	} else {
+		logger.Println("✅ All rule sets successfully compiled!")
+	}
+}
+
+// triggerUpdateTask 是真正的执行函数，供 HTTP handler 和手动触发复用
+// 同时执行 SubUrls 下载和 RuleSet 编译
 func triggerUpdateTask() {
 	var outputBuilder strings.Builder
 	logWriter := io.MultiWriter(os.Stdout, &outputBuilder)
@@ -48,49 +92,11 @@ func triggerUpdateTask() {
 
 	hasError := false
 
-	// --- Phase 1: Update Subscriptions ---
-	logger.Println("--> Phase 1: Updating subscriptions...")
+	// Phase 1: SubUrls
+	updateSubUrls()
 
-	// 确保目录存在
-	if err := os.MkdirAll(RuleDir, 0755); err != nil {
-		logger.Printf("❌ 无法创建目录 %s: %v\n", RuleDir, err)
-		hasError = true
-	}
-
-	confLock.RLock()
-	subUrls := conf.SubUrls // 这是一个 map[string]string，键为文件名，值为 url
-	confLock.RUnlock()
-
-	for fileName, url := range subUrls {
-		logger.Printf("⏳ Fetching nodes for [%s]...", fileName)
-		targetFile := filepath.Join(TemplatesDir, fileName)
-		tempFile := targetFile + ".tmp"
-
-		err := downloadFile(url, tempFile, logger)
-		if err != nil {
-			logger.Printf("❌ Failed to update [%s]: %v. Retaining old file.", fileName, err)
-			hasError = true
-			os.Remove(tempFile) // 清理临时文件
-		} else {
-			// 下载成功，覆盖原文件
-			if err := os.Rename(tempFile, targetFile); err != nil {
-				logger.Printf("❌ 覆盖文件失败 [%s]: %v", fileName, err)
-				hasError = true
-			} else {
-				logger.Printf("✅ Successfully updated [%s].", fileName)
-			}
-		}
-	}
-
-	// --- Phase 2: Compile and Update Rule Sets ---
-	logger.Println("\n--> Phase 2: Compiling cloud rule sets...")
-	err := processRules(logger)
-	if err != nil {
-		logger.Printf("❌ Phase 2 Failed: %v\n", err)
-		hasError = true
-	} else {
-		logger.Println("✅ [Success] All rule sets successfully compiled!")
-	}
+	// Phase 2: RuleSets
+	updateRuleSets()
 
 	logger.Println("===================================================")
 	logger.Printf("🎉 [%s] Auto-Update Task Finished\n", time.Now().Format("2006-01-02 15:04:05"))
@@ -169,10 +175,15 @@ func processRules(logger *log.Logger) error {
 		return fmt.Errorf("Rule collection CSV not found: %s", CSVFile)
 	}
 
-	// 1. Initialize: Clear content after [MANUAL_END] Private
+	// 1. Initialize: Backup and clear content after [MANUAL_END] Private
 	files, err := filepath.Glob(filepath.Join(RuleDir, "86*.yaml"))
+	backups := make(map[string][]byte) // filePath -> original content
 	if err == nil {
 		for _, file := range files {
+			// 备份当前文件内容（truncate 前）
+			if content, readErr := os.ReadFile(file); readErr == nil {
+				backups[file] = content
+			}
 			truncateFileAtMarker(file, "[MANUAL_END] Private")
 		}
 	}
@@ -273,6 +284,18 @@ func processRules(logger *log.Logger) error {
 	}
 	logger.Printf("------------------------------------------")
 
+	// 4. 验证：检查每个规则文件的规则数，不足阈值则回滚
+	const minRuleCount = 100
+	for file, backup := range backups {
+		ruleCount := countRulesInFile(file)
+		if ruleCount < minRuleCount {
+			logger.Printf("⚠️ %s 规则数 %d < %d，回滚到更新前版本", filepath.Base(file), ruleCount, minRuleCount)
+			os.WriteFile(file, backup, 0644)
+		} else {
+			logger.Printf("✅ %s 规则数 %d，更新有效", filepath.Base(file), ruleCount)
+		}
+	}
+
 	return nil
 }
 
@@ -307,6 +330,23 @@ func appendToFile(filePath, content string) {
 	}
 	defer f.Close()
 	f.WriteString(content)
+}
+
+// countRulesInFile 统计 86*.yaml 文件中的规则条目数（非空、非注释行）
+func countRulesInFile(filePath string) int {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // processAwkLogic 模拟 bash 脚本中复杂的 awk 处理逻辑
