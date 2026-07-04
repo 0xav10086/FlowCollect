@@ -1,12 +1,10 @@
 /**
  * WebSocket 连接工具模块
- * 基于 VITE_API_BASE_URL 自动推导 WS/WSS 协议
+ * 当 VITE_API_BASE_URL 为空时，基于当前页面地址推导 WS 地址（适用于 Nginx 反代同域部署）
  */
 
-import { toWsUrl, buildApiUrl } from './http'
-
 export interface WsOptions {
-  /** API 路径，如 '/ws/traffic' */
+  /** API 路径，如 '/ws' */
   path: string
   /** 连接成功回调 */
   onOpen?: (ws: WebSocket) => void
@@ -22,15 +20,22 @@ export interface WsOptions {
 
 /**
  * 构建 WebSocket URL
- * 将 VITE_API_BASE_URL 的 http/https 替换为 ws/wss
- * @param path - WS 路径，如 '/ws/traffic'
+ * - 如果配置了 VITE_API_BASE_URL，将其 http/https 替换为 ws/wss
+ * - 如果未配置（空），基于当前页面 location 推导（同域反代场景）
+ * @param path - WS 路径，如 '/ws'
  */
 export function buildWsUrl(path: string): string {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL as string
-  const wsBase = toWsUrl(baseUrl)
-  const normalizedBase = wsBase.replace(/\/+$/, '')
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL as string) || ''
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${normalizedBase}${normalizedPath}`
+
+  if (!baseUrl) {
+    // 同域反代：基于当前页面地址推导
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${window.location.host}${normalizedPath}`
+  }
+
+  const wsBase = baseUrl.replace(/^http/, 'ws').replace(/\/+$/, '')
+  return `${wsBase}${normalizedPath}`
 }
 
 /**

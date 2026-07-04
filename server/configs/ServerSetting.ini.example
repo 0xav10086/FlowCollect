@@ -1,6 +1,6 @@
 [server]
 ; 监听端口（格式 :端口号）
-ListenPort  = :7886
+ListenPort  = :8686
 ; API 鉴权 Token
 ServerToken = YourSecretToken
 ; SQLite 数据库路径（Docker 模式必须使用容器内绝对路径，如 /app/data/traffic.db）
@@ -18,10 +18,8 @@ MainSubFile = main_sub.yaml
 ; 开启后，启动时将自动解析 MainSubFile 并覆盖 INI 中的配置
 ReadMainSubConfig = false
 
-; CF Tunnel 容器名（用于健康监控，每 5 分钟检查一次，掉线自动重启）
-; 需要挂载 Docker Socket: -v /var/run/docker.sock:/var/run/docker.sock
-; 留空则禁用此功能
-CFTunnelContainer = cf_tunnel
+; 外部健康检查 URL（留空则禁用，每 5 分钟检查一次，仅报告状态）
+; HealthCheckURL = https://subscription.0xav10086.space/health
 
 [smtp]
 SMTPHost  = smtp.qq.com

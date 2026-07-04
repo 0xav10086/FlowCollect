@@ -10,7 +10,7 @@
 1. **动态订阅分发枢纽**：读取 `templates/` 目录下的节点配置模板和 `RuleSet/` 规则集，通过 `/sub` 路由为客户端动态计算并下发 Clash 订阅配置。
 2. **模板文件原始分发**：通过 `/templates/*filepath` 路由供 proxy-providers / rule-providers 拉取原始 YAML 文件。
 3. **流量审计 API**：提供 REST API 和 WebSocket 端点，接收 Sidecar 上报的流量数据，存储至 SQLite，并向前端仪表盘实时推送。
-4. **CF Tunnel 健康监控**：每 5 分钟检查 Cloudflare Tunnel 连通性，掉线时通过 Docker Engine API (Unix Socket) 自动重启容器。
+4. **外部健康检查**：可选功能，每 5 分钟检查配置的外部 URL 可达性，仅报告状态（不自动重启容器）。
 5. **配置热更新**：通过 fsnotify 监听 INI 配置文件和 CSV 规则清单的变化，自动重载配置或重新编译规则集。
 
 ### 1.1 架构目标
@@ -24,7 +24,7 @@
 | CORS + WebSocket 放行 | 允许跨域升级请求，放行 Cloudflare 特有头部 | `[x]` |
 | TrustedPlatform 真实 IP | 适配 Cloudflare 隧道部署 | `[x]` |
 | 动态配置覆盖 | `ReadMainSubConfig=true` 时，启动阶段从主订阅 YAML 提取 `mixed-port`/`port` 和 `secret`，覆盖 INI 的 `ListenPort`/`ServerToken` | `[x]` |
-| CF Tunnel 健康监控 | 每 5 分钟检查外部 URL，失败时通过 Docker API 自动重启容器 | `[x]` |
+| 外部健康检查 | 每 5 分钟检查配置的外部 URL，仅报告状态（留空则禁用） | `[x]` |
 | CSV 变更自动重编 | 监听 `86_rule_set_collect.csv` 变化，2 秒防抖后自动重新编译所有规则集 | `[x]` |
 | INI 配置热更新 | 监听 `ServerSetting.ini` 变化，自动重载配置到内存 | `[x]` |
 | 订阅启动时更新 | 服务启动后立即执行一次 `updateSubscriptionData()`，避免等待凌晨 cron | `[x]` |
@@ -40,7 +40,7 @@
 server/
 ├── main.go                      # 入口：ensureDirs()、setupLogging()、Gin 引擎初始化、路由注册、cron 调度
 ├── config.go                    # 配置管理：加载/监听 ServerSetting.ini，支持热更新
-├── docker.go                    # CF Tunnel 健康监控：通过 Docker Engine API (Unix Socket) 重启容器
+├── docker.go                    # 通用 URL 可达性检查工具（HealthCheck，留空则禁用）
 ├── handlers.go                  # REST API 处理：/api/auth、/api/stats、/api/devices、/report
 ├── sub_handler.go               # 订阅分发：读取 templates/ 动态生成 Clash 配置；模板文件原始分发
 ├── websocket.go                 # WebSocket 端点：/ws 实时流量上报接收与推送
@@ -53,7 +53,7 @@ server/
 ├── go.mod / go.sum              # Go 依赖管理
 │
 ├── configs/                     # 配置文件（*.ini 被 .gitignore 忽略）
-│   ├── ServerSetting.ini        #   运行时配置（端口、Token、SMTP、订阅链接、CFTunnelContainer 等）
+│   ├── ServerSetting.ini        #   运行时配置（端口、Token、SMTP、订阅链接、HealthCheckURL 等）
 │   └── ServerSetting.ini.example#   配置模板（提交到仓库供参考）
 │
 ├── templates/                   # 订阅模板与规则集（/sub 路由读取此目录）
@@ -95,7 +95,7 @@ server/
 | `conf.MainSubFile` | `./templates/{MainSubFile}` | `ReadMainSubConfig` 启用时，动态提取端口和 Token 的 YAML 源文件 |
 | `conf.ListenPort` | `:7886`（默认值） | Gin HTTP 监听端口 |
 | `conf.ServerToken` | `YourSecretToken`（默认值） | Bearer Token 鉴权密钥 |
-| `conf.CFTunnelContainer` | 运行时配置 | Docker 容器名，用于 CF Tunnel 健康监控（空=禁用） |
+| `conf.HealthCheckURL` | 运行时配置 | 外部健康检查 URL（空=禁用） |
 | `conf.SubUrls` | INI 中的 SubUrls 段 | 订阅源映射（文件名→URL），`loadConfig()` 后立即生效 |
 | 日志文件 | `./logs/server.log` | 运行日志输出（`setupLogging()` 同时输出到 stdout 和文件） |
 
@@ -114,8 +114,9 @@ server/
 - 镜像内仅包含编译好的二进制（`/app/flow_server`），不含任何源码、配置或数据文件。
 - 四个运行时目录（`configs/`、`templates/`、`data/`、`logs/`）必须从宿主机 Volume 注入。
 - 容器默认以 `appuser`（UID 1000）运行，宿主机挂载目录需确保可读写权限。
-- CF Tunnel 健康检查需要额外挂载 Docker socket：`-v /var/run/docker.sock:/var/run/docker.sock`，且使用 `--user root`。
 - 时区通过 `-e TZ=Asia/Shanghai` 环境变量注入（镜像已内置 `tzdata`）。
+- 内置 `HEALTHCHECK` 指令，探测 `GET /health` 端点（间隔 30s，超时 5s，重试 3 次）。
+- 推荐使用 `docker-compose.yml` 编排部署（见 `server/docker-compose.yml`）。
 
 ### 2.2 发布流程
 
@@ -133,15 +134,40 @@ server/
 
 **等待时间**：推送 tag 后，sleep 140 秒等待 CI 完成。
 
-**NAS 部署命令**（单行，不要使用 `\` 换行）：
+**ECS 部署方式（docker-compose）**：
+
+服务端通过 `docker-compose.yml` 编排，Go server 仅绑定 `127.0.0.1:8686`，由 Nginx 反代对外提供服务。
+
 ```bash
-sudo docker pull ghcr.io/0xav10086/flow-collect-server:v1.1.3 && sudo docker stop flow-collect && sudo docker rm flow-collect && sudo docker run -d --name flow-collect --user root --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock -v /volume1/docker/flow_collect/configs:/app/configs -v /volume1/docker/flow_collect/templates:/app/templates -v /volume1/docker/flow_collect/data:/app/data -v /volume1/docker/flow_collect/logs:/app/logs -p 7886:7886 -e TZ=Asia/Shanghai ghcr.io/0xav10086/flow-collect-server:v1.1.3
+# 在 ECS 上部署
+cd /path/to/flow_collect/server
+# 准备 configs/ServerSetting.ini 和 templates/ 目录
+docker compose up -d
 ```
 
-注意：
-- `{version}` 替换为实际的 tag 名（如 `v1.1.1`）
-- `--user root` + `-v /var/run/docker.sock:/var/run/docker.sock` 用于 CF Tunnel 容器重启
-- NAS 路径 `/volume1/docker/flow_collect/` 下需提前准备好 `configs/`、`templates/`、`data/`、`logs/` 目录
+`docker-compose.yml` 内容：
+```yaml
+services:
+  flow-server:
+    build: .
+    container_name: flow_server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8686:8686"
+    volumes:
+      - ./configs:/app/configs
+      - ./templates:/app/templates
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+```
+
+**架构说明**：
+- ECS 有固定公网 IP，`subscription.0xav10086.space` DNS 解析到 ECS（无 Cloudflare 代理）
+- Go server 通过 Nginx 反代对外，前端和 API 同域（`dash.0xav10086.space`），无 CORS 问题
+- 不再需要 CF Tunnel，不再需要挂载 Docker Socket
+- Sidecar 客户端通过 Nginx 反代的 `/ws` 端点上报流量
 
 ---
 
@@ -167,7 +193,7 @@ sudo docker pull ghcr.io/0xav10086/flow-collect-server:v1.1.3 && sudo docker sto
 ```
 客户端 GET /templates/PowerBy0xav10086?token=YourSecretToken
   → 返回 ./templates/PowerBy0xav10086 文件的原始内容
-  → 用于 proxy-providers: { path: "...", url: "https://nas.0xav10086.space/templates/..." }
+  → 用于 proxy-providers: { path: "...", url: "https://subscription.0xav10086.space/templates/..." }
 ```
 
 鉴权：URL 参数 `token` 验证，与 `/sub` 共享鉴权逻辑。
@@ -230,7 +256,7 @@ r.TrustedPlatform = gin.PlatformCloudflare
 行为：
 - 调用 `loadConfig()` 重新解析整个 INI 文件，更新 `conf` 结构体
 - **SubUrls** — 内存中的订阅 URL map 立即更新，但不会自动触发订阅下载（需要等 cron 或手动 `/api/trigger-update`）
-- **CFTunnelContainer** — 下次健康检查（每 5 分钟）自动读取新值
+- **HealthCheckURL** — 下次健康检查（每 5 分钟）自动读取新值
 - **ServerToken / ListenPort** — `loadConfig()` 更新内存值，但已注册的 Gin 路由不会重新绑定
 
 ### 5.2 CSV 变更自动重编（`watchCSV()` in `yaml_config.go`）
@@ -245,17 +271,16 @@ r.TrustedPlatform = gin.PlatformCloudflare
    - 对每条有效规则记录，下载远程规则文件并追加到对应的策略组文件
 3. 新内容对下一次 `/sub` 请求立即可见
 
-### 5.3 CF Tunnel 健康监控（`docker.go`）
+### 5.3 外部健康检查（`docker.go`）
 
 | 项目 | 说明 |
 |------|------|
 | 检查周期 | 每 5 分钟（cron: `*/5 * * * *`）|
-| 检查方式 | HTTP GET `https://nas.0xav10086.space/`，超时 5s |
+| 检查方式 | HTTP GET `conf.HealthCheckURL`，超时 5s |
 | 失败条件 | 网络错误 或 HTTP 状态码 >= 500 |
-| 失败动作 | 立即调用 `dockerRestartContainer(container)` |
-| 重启方式 | Docker Engine API via Unix Socket (`/var/run/docker.sock`) |
+| 失败动作 | 仅记录日志，不自动重启容器 |
 
-容器名从 `ServerSetting.ini` 的 `CFTunnelContainer` 字段读取。
+URL 从 `ServerSetting.ini` 的 `HealthCheckURL` 字段读取，留空则禁用。
 
 ---
 
@@ -271,8 +296,8 @@ main()
 ├── go watchConfig()                # 启动 INI 文件监听
 ├── go watchCSV()                   # 启动 CSV 文件监听
 ├── initDB()                        # 初始化 SQLite（WAL 模式）
-├── cron.Start()                    # 注册定时任务（日报/清理/订阅更新/CF Tunnel 检查）
-├── CFTunnelHealthCheck()           # 启动时立即执行一次隧道检查
+├── cron.Start()                    # 注册定时任务（日报/清理/健康检查）
+├── HealthCheck()                   # 启动时立即执行一次健康检查（如果配置了 URL）
 ├── updateSubscriptionData()        # 启动时立即更新一次订阅数据
 └── r.Run(port)                     # 启动 Gin HTTP 服务
 ```

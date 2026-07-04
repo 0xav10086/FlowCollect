@@ -1,18 +1,21 @@
 /**
  * HTTP 请求工具模块
  * 基于 VITE_API_BASE_URL 动态构建请求地址，消除硬编码路径
+ * 当 VITE_API_BASE_URL 为空时，使用相对路径（适用于 Nginx 反代同域部署）
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL as string
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || ''
 
 /**
  * 构建完整的 API URL
  * @param path - API 路径，如 '/api/stats'
  */
 export function buildApiUrl(path: string): string {
-  // 确保 path 以 / 开头，BASE_URL 不以 / 结尾
-  const normalizedBase = BASE_URL.replace(/\/+$/, '')
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (!BASE_URL) {
+    return normalizedPath
+  }
+  const normalizedBase = BASE_URL.replace(/\/+$/, '')
   return `${normalizedBase}${normalizedPath}`
 }
 

@@ -1,0 +1,14 @@
+services:
+  flow-server:
+    build: .
+    container_name: flow_server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8686:8686"
+    volumes:
+      - ./configs:/app/configs
+      - ./templates:/app/templates
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai

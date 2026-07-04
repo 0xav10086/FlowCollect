@@ -28,7 +28,7 @@ type ServerConfig struct {
 	SubUrls           map[string]string // 变更为 map，键为 filename，值为 url
 	MainSubFile       string            // 主订阅文件路径（相对于 templates/ 目录）
 	ReadMainSubConfig bool              // 是否从主订阅文件读取端口和 Token 配置
-	CFTunnelContainer string            // CF Tunnel 容器名（用于健康监控，留空则禁用）
+	HealthCheckURL    string            // 健康检查 URL（留空则禁用）
 	SubUrlsUpdateTime int               // SubUrls 更新间隔（秒），默认 604800（7 天）
 	RuleSetUpdateTime int               // RuleSet 更新间隔（秒），默认 604800（7 天）
 }
@@ -70,7 +70,7 @@ func loadConfig() error {
 		SubUrls:           subUrlsMap,
 		MainSubFile:       "main_sub.yaml",
 		ReadMainSubConfig: false,
-		CFTunnelContainer: "",
+		HealthCheckURL:    "",
 		SubUrlsUpdateTime: 604800,
 		RuleSetUpdateTime: 604800,
 	}
@@ -138,8 +138,8 @@ func loadConfig() error {
 					conf.MainSubFile = val
 				case "readmainsubconfig":
 					conf.ReadMainSubConfig = val == "true" || val == "1" || val == "yes"
-				case "cftunnelcontainer":
-					conf.CFTunnelContainer = val
+				case "healthcheckurl":
+					conf.HealthCheckURL = val
 				case "suburls_update_time":
 					if v, err := strconv.Atoi(val); err == nil && v > 0 {
 						conf.SubUrlsUpdateTime = v

@@ -26,19 +26,19 @@
 
 | 组件 | 说明 | 备注 |
 |------|------|------|
-| **内网 / NAS 主机** | 运行 Go 服务端（`flow_server_linux`）的 Linux 设备 | 需要长期在线，建议使用 NAS 或小型服务器 |
-| **Cloudflare Zero Trust** | 账号 + Tunnel 配置 | 用于将内网 NAS 的 API/WS 端口安全暴露到公网，**不暴露真实 IP** |
-| **国内 VPS / CDN** | 用于托管 Vue 3 前端静态资源 | 需完成 ICP 备案的域名，例如 `dash.your-domain.com` |
-| **域名** | 两个子域名（可同域） | 一个指向 VPS（前端），一个指向 CF Tunnel（后端 API） |
+| **ECS / 云服务器** | 有固定公网 IP，运行 Go 服务端（Docker）+ Nginx 前端 | 需要长期在线，建议 2C4G 以上配置 |
+| **域名** | 两个子域名指向同一 ECS | `dash.*` 用于前端 + API（Nginx 反代），`subscription.*` 用于订阅分发 |
+| **Docker + Docker Compose** | 容器化部署 Go 服务端 | 通过 `docker-compose.yml` 编排 |
+| **Nginx** | 反向代理 | 统一入口，反代 `/api`、`/ws`、`/sub`、`/templates` 到 Go server |
 | **Clash Meta / Mihomo** | 客户端代理内核 | 用于运行 Sidecar 注入的宿主环境 |
 
 ---
 
 ## Architecture
 
-### 数据流向 — "Y 型"拓扑
+### 数据流向 — ECS 统一部署
 
-用户浏览器是整个数据流的分叉点：静态资源走 VPS，动态数据走 CF 隧道直抵 NAS。**NAS 与 VPS 之间没有任何直接通信。**
+ECS（有固定公网 IP）同时承担前端静态服务和后端 API 服务。前端通过 Nginx 反代调用 API，同域访问无 CORS 问题。
 
 ```
                             ┌─────────────────────────────────┐
@@ -47,48 +47,46 @@
                             └────────┬──────────────┬─────────┘
                                      │              │
                          静态资源请求 │              │ API / WebSocket 请求
-                      (HTML/JS/CSS)  │              │ (wss://nas.0xav10086.space)
-                                     ▼              │
-                 ┌──────────────────┐               │
-                 │  国内 VPS        │               │
-                 │                  │               ▼
-                 │  Nginx / CDN     │      ┌──────────────────────┐
-                 │  ┌────────────┐  │      │  Cloudflare Tunnel   │◀──────┐
-                 │  │ Vue 3 SPA  │  │      │  (Zero Trust)        │       │
-                 │  │ (dist/)    │  │      └──────────┬───────────┘       │ Sidecar 上报 (WSS)
-                 │  └────────────┘  │                 │                   │ (wss://nas.0xav10086.space)
-                 └──────────────────┘                 │                   │
-                                                      ▼                   │
-                                           ┌──────────────────────┐       │
-                                           │  NAS / 内网 Server    │       │
-                                           │                      │       │
-                                           │  Go + Gin            │       │
-                                           │  ├── REST API        │       │
-                                           │  ├── WebSocket 实时流│       │
-                                           │  └── SQLite 存储     │       │
-                                           └──────────────────────┘       │
-                                                                          │
-                                           ┌──────────────────────┐       │
-                                           │  客户端 (Sidecar)     │───────┘
-                                           │                      │
-                                           │  Clash Meta / Mihomo │
-                                           │  + FlowCollect       │
-                                           │    Reporter          │
-                                           └──────────────────────┘
+                      (HTML/JS/CSS)  │              │ (同域，Nginx 反代)
+                                     ▼              ▼
+                 ┌──────────────────────────────────────────────┐
+                 │  ECS (固定公网 IP)                            │
+                 │                                              │
+                 │  Nginx (:443)                                │
+                 │  ├── 静态文件 → Vue 3 SPA (dist/)            │
+                 │  ├── /api/* → 127.0.0.1:8686 (Go server)    │
+                 │  ├── /ws    → 127.0.0.1:8686 (WebSocket)    │
+                 │  ├── /sub   → 127.0.0.1:8686 (订阅分发)      │
+                 │  └── /templates/* → 127.0.0.1:8686 (模板)    │
+                 │                                              │
+                 │  Docker: Go + Gin + SQLite (:8686, 仅本地)   │
+                 └──────────────────────────────────────────────┘
+                         ▲                    ▲
+                         │                    │
+                   前端请求                Sidecar 上报 (WSS)
+                                         (通过 Nginx 反代 /ws)
+
+                 ┌──────────────────────┐
+                 │  客户端 (Sidecar)     │
+                 │                      │
+                 │  Clash Meta / Mihomo │
+                 │  + FlowCollect       │
+                 │    Reporter          │
+                 └──────────────────────┘
 ```
 
 **拆解说明**：
 
-1. **静态资源路径**：用户浏览器访问 `dash.0xav10086.space` → 国内 VPS（Nginx）返回 Vue 3 SPA 的 `index.html`、JS、CSS 等静态文件。此路径不经过 CF 隧道。
-2. **动态数据路径**：浏览器中运行的 Vue 3 SPA 通过 `wss://nas.0xav10086.space`（或 `https://`）发起 API/WebSocket 请求 → 经 Cloudflare 隧道穿透至 NAS 内网的 Go 服务端。
-3. **Sidecar 上报路径**：客户端代理内核（Clash Meta）旁路注入的 FlowCollect Reporter 同样通过 `wss://nas.0xav10086.space` 将流量数据上报至 CF 隧道，再穿透至 NAS。**Sidecar 不直连 NAS，必须经 CF 隧道暴露。**
-4. **物理隔离**：NAS 与 VPS 之间**零通信**。浏览器和 Sidecar 是两个独立的请求源，均通过 CF 隧道汇聚到 NAS，VPS 仅承担静态资源分发。
+1. **统一入口**：用户浏览器访问 `dash.0xav10086.space`，Nginx 统一处理静态文件和 API 反代。前端使用相对路径调用 API，同域无 CORS。
+2. **Go server 隔离**：Go server 仅绑定 `127.0.0.1:8686`，不直接暴露公网，由 Nginx 反代对外。
+3. **Sidecar 上报**：客户端通过 `wss://dash.0xav10086.space/ws`（经 Nginx 反代）上报流量数据。
+4. **订阅分发**：`subscription.0xav10086.space` DNS 解析到 ECS 公网 IP，供 Clash 客户端拉取订阅配置。
 
 | 层级 | 策略 | 原因 |
 |------|------|------|
-| **后端** | 部署在 NAS / 内网，通过 Cloudflare 隧道暴露 | 避免直接暴露真实 IP，规避 VPS 封禁风险 |
-| **前端** | 托管在国内 VPS / CDN | 合规备案，访问速度快 |
-| **通信** | 全链路 HTTPS / WSS | 数据加密传输，CF 隧道自动 TLS |
+| **后端** | 部署在 ECS，通过 Nginx 反代对外 | Go server 仅绑定 127.0.0.1，不直接暴露公网 |
+| **前端** | 同一台 ECS，Nginx 托管静态资源 | 前后端同域，无 CORS 问题 |
+| **通信** | 全链路 HTTPS / WSS | Nginx 统一 TLS 终止 |
 
 ---
 

@@ -13,7 +13,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const serverVersion = "v1.1.4"
+const serverVersion = "v1.2.0"
 
 func main() {
 	// 0. 确保运行时目录存在
@@ -55,7 +55,7 @@ func main() {
 	// 打印配置摘要
 	confLock.RLock()
 	cfgListenPort := conf.ListenPort
-	cfgCFTunnel := conf.CFTunnelContainer
+	cfgHealthCheckURL := conf.HealthCheckURL
 	cfgSubUrls := len(conf.SubUrls)
 	cfgSMTP := conf.SMTPHost != "" && conf.EmailTo != ""
 	cfgSubUrlsInterval := conf.SubUrlsUpdateTime
@@ -66,10 +66,10 @@ func main() {
 	log.Printf("  FlowCollect Server %s", serverVersion)
 	log.Println("========================================")
 	log.Printf("  监听端口: %s", cfgListenPort)
-	if cfgCFTunnel != "" {
-		log.Printf("  CF Tunnel 监控: 启用 (容器: %s, 检查间隔: 5分钟)", cfgCFTunnel)
+	if cfgHealthCheckURL != "" {
+		log.Printf("  健康检查: 启用 (%s)", cfgHealthCheckURL)
 	} else {
-		log.Println("  CF Tunnel 监控: 未配置 (CFTunnelContainer 为空)")
+		log.Println("  健康检查: 未配置 (HealthCheckURL 为空)")
 	}
 	log.Printf("  CSV 文件监听: 启用 (%s)", CSVFile)
 	log.Printf("  INI 文件监听: 启用 (%s)", iniPath)
@@ -101,19 +101,19 @@ func main() {
 	_, _ = c.AddFunc("0 3 * * *", func() {
 		cleanupOldData(30)
 	})
-	// CF Tunnel 健康监控（每 5 分钟检查一次）
+	// 健康检查（每 5 分钟检查一次，仅在配置了 HealthCheckURL 时生效）
 	_, err := c.AddFunc("*/5 * * * *", func() {
-		CFTunnelHealthCheck()
+		HealthCheck()
 	})
 	if err != nil {
-		log.Printf("[CF Tunnel] cron 注册失败: %v", err)
+		log.Printf("[HealthCheck] cron 注册失败: %v", err)
 	} else {
-		log.Println("[CF Tunnel] cron 已注册: */5 * * * *")
+		log.Println("[HealthCheck] cron 已注册: */5 * * * *")
 	}
 	c.Start()
 
-	// 启动时立即执行一次 CF Tunnel 健康检查
-	go CFTunnelHealthCheck()
+	// 启动时立即执行一次健康检查
+	go HealthCheck()
 
 	// 5. 启动时立即更新一次订阅数据（流量元数据）
 	go updateSubscriptionData()
@@ -175,6 +175,11 @@ func main() {
 			return
 		}
 		c.Next()
+	})
+
+	// 健康检查端点
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok", "version": serverVersion})
 	})
 
 	// API 路由组
